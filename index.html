@@ -1,0 +1,369 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Sentence Player v4.1 (3列対応)</title>
+<style>
+body{font-family:sans-serif;margin:12px;max-width:1200px}
+#topHeader{margin-bottom:8px!important;padding:3px 0!important}
+#topHeader h2{font-size:19px;margin:4px 0}
+#topHeader label{font-size:12px!important;padding:5px 8px!important}
+#studyTop{padding:8px;margin-bottom:12px}
+#topControls{font-size:12px;gap:3px!important;margin:4px 0 7px!important;padding-bottom:6px}
+#topControls input,#topControls button{font-size:12px;padding:3px;margin:2px}
+#topControls #jumpInput{width:65px!important}
+#position{font-size:15px!important}
+#rangeControls{font-size:12px;margin-top:5px;padding-top:5px;gap:2px}
+#rangeControls input[type=number]{width:55px;padding:3px}
+#rangeInfo{font-size:11px!important}
+#eng{font-size:20px;font-weight:bold;margin-top:16px}
+#jp{font-size:16px;color:#0066cc;margin-top:12px}
+#jp2{font-size:16px;color:#cc6600;margin-top:8px}
+button,input,select{font-size:14px;padding:6px;margin:4px}
+#status{background:#f3f3f3;padding:8px;border-radius:6px;margin:8px 0}
+#voiceSelect{max-width:320px}
+#studyTop{border:1px solid #ddd;border-radius:8px;padding:12px;margin-bottom:16px;background:#fff}
+#topControls{border-bottom:1px solid #ddd;padding-bottom:10px}
+#sentenceDisplay{margin-top:12px}
+#repeatRow{font-size:18px;margin:12px 0}
+#playControls{margin:8px 0}
+#rangeControls{border-top:1px solid #ddd;margin-top:10px;padding-top:10px;display:flex;flex-wrap:wrap;align-items:center;gap:4px}
+#rangeControls input[type=number]{width:76px}
+#playSettings{display:flex;flex-wrap:wrap;align-items:center;gap:3px;margin-top:6px;padding-top:6px;border-top:1px solid #eee;font-size:12px}
+#playSettings label{white-space:nowrap}
+#playSettings select{font-size:12px;padding:3px;margin:2px;max-width:210px}
+#playSettings input[type=checkbox]{margin:3px}
+#playControls{margin:5px 0}
+#playControls button{font-size:15px;padding:5px 8px;margin:2px}
+#eng{line-height:1.4}
+#jp,#jp2{line-height:1.5}
+#sentenceDisplay{margin-top:12px}
+#eng{line-height:1.4}
+#jp,#jp2{line-height:1.5}
+.editable-text{cursor:pointer;border-radius:4px;padding:2px;min-height:1em}
+.editable-text:active,.editable-text:hover{background:#f5f8ff;outline:1px dashed #9ab}
+.edit-hint{font-size:12px;color:#666;margin-top:8px}
+.inline-editor{width:100%;box-sizing:border-box;font:inherit;line-height:1.5;padding:8px;margin:6px 0}
+.edit-actions button{font-size:14px;padding:6px 12px}
+#saveEditedBtn,#overwriteBtn,#chooseOverwriteBtn{font-size:15px;padding:8px 12px;margin:8px 4px 8px 0}
+#saveHelp{font-size:12px;color:#555;margin:4px 0 10px}
+</style>
+</head>
+<body>
+<header id="topHeader" style="margin:0 0 14px;padding:8px 0;border-bottom:1px solid #ddd">
+  <h2>Sentence Player</h2>
+  <div style="margin:8px 0"><label for="folderInput" style="display:inline-block;padding:8px 12px;border:1px solid #888;border-radius:4px;cursor:pointer">ファイル選択</label> <input style="display:none" type="file" id="folderInput" webkitdirectory multiple></div>
+</header>
+
+<div id="studyTop">
+  <div id="topControls" style="display:flex;flex-wrap:wrap;align-items:center;gap:6px;margin:8px 0 12px">
+    <div>ジャンプ <input id="jumpInput" type="number" placeholder="番号" style="width:100px"><button id="jumpBtn">移動</button></div>
+    <div id="position" style="font-size:18px;font-weight:bold">No.0 / 0</div>
+  </div>
+  <div id="playControls"><button id="prevBtn">◀前</button><button id="playBtn">▶再生</button><button id="stopBtn">■停止</button><button id="nextBtn">▶次</button></div>
+  <div id="sentenceDisplay">
+    <div id="eng" class="editable-text" data-field="eng" title="クリックして編集"></div><div id="jp" class="editable-text" data-field="jp" title="クリックして編集"></div><div id="jp2" class="editable-text" data-field="jp2" title="クリックして編集"></div><div class="edit-hint">英文・日本語文をクリックすると、その文だけ編集できます。</div>
+  </div>
+  <p id="repeatRow">再生回数 <span id="repeatInfo">0/0</span></p>
+    <div id="rangeControls"><label><input type="checkbox" id="rangeEnabled"> 範囲リピート</label><label>開始No. <input id="rangeStart" type="number" min="1" value="1"></label><label>終了No. <input id="rangeEnd" type="number" min="1" value="10"></label><button id="applyRangeBtn" type="button">範囲を設定</button><span id="rangeInfo" style="font-size:13px;color:#42624a">全範囲で再生</span></div>
+  <div id="playSettings">
+    <label>リピート <select id="repeatSelect"><option>1</option><option>3</option><option selected>5</option><option>10</option><option>20</option><option>30</option><option>50</option><option>100</option><option value="9999">∞</option></select></label>
+    <label>速度 <select id="speedSelect"><option>0.5</option><option>0.7</option><option>0.8</option><option>0.9</option><option selected>1.0</option><option>1.2</option><option>1.5</option><option>2.0</option></select></label>
+    <label>再生方式 <select id="playMode"><option value="auto" selected>英語MP3／なければ読み上げ</option><option value="mp3">英語MP3のみ</option><option value="tts">英語読み上げ</option></select></label>
+    <label>日本語音声 <select id="jpMode"><option value="mp3" selected>MP3優先（なければ読み上げ）</option><option value="tts">日本語読み上げ</option><option value="off">再生しない</option></select></label>
+    <label>順序 <select id="sequenceMode"><option value="en-only">英語だけ</option><option value="en-jp">英語→日本語</option><option value="en-jp-en">英語→日本語→英語</option><option value="jp-en">日本語→英語</option></select></label>
+    <label>音声 <select id="voiceSelect"></select></label>
+    <label><input type="checkbox" id="showJapanese" checked>日本語表示</label>
+  </div>
+</div>
+
+<h3>Sentence Player v4.1 (3列対応)</h3>
+
+<div id="resumeInfo" style="font-size:0.9em;color:#42624a;margin:6px 0;">学習位置は自動保存されます</div><div id="status">教材未読込</div>
+<button id="saveEditedBtn" type="button">別ファイルとして保存</button> <button id="chooseOverwriteBtn" type="button">上書きする元ファイルを選択</button> <button id="overwriteBtn" type="button">上書き保存</button>
+<div id="saveHelp">「別ファイルとして保存」はUTF-8（BOM付き）のTSVをダウンロードします。上書き保存もUTF-8（BOM付き）になります。元ファイルがShift_JISの場合、元の文字コードには戻さずUTF-8に変換して保存します。</div>
+<div id="audioStatus" style="background:#f8f8f8;padding:8px;border-radius:6px;margin:8px 0">
+  音声：英語MP3・日本語MP3を同じフォルダから読み込みます。両方の音声ファイル名が同じ番号の場合は、別フォルダに分けてください。
+</div>
+
+
+
+<audio id="audio"></audio>
+<script>
+let items=[],mp3Files={},jpMp3Files={},current=0,repeatCount=0,voices=[],sequenceParts=[],sequenceIndex=0,playToken=0,editingField=null,sourceTextName='SentencePlayer_edited.tsv',loadedTextName='',overwriteHandle=null;
+const audio=document.getElementById('audio');
+const statusEl=document.getElementById('status');
+const posEl=document.getElementById('position');
+const engEl=document.getElementById('eng');
+const jpEl=document.getElementById('jp');
+const jp2El=document.getElementById('jp2');
+function loadVoices(){voices=speechSynthesis.getVoices();const s=document.getElementById('voiceSelect');const old=s.value;s.innerHTML='';voices.forEach((v,i)=>{const o=document.createElement('option');o.value=i;o.textContent=`${v.name} (${v.lang})`;s.appendChild(o)});const e=voices.findIndex(v=>v.lang.startsWith('en'));if(e>=0)s.value=e;}
+loadVoices();speechSynthesis.onvoiceschanged=loadVoices;
+async function decodeTextFile(file){
+  const b=await file.arrayBuffer();
+  // UTF-8は「空白があるか」ではなく、バイト列が正しいUTF-8かで判定する。
+  // 英文にスペースが含まれるだけでShift_JIS扱いになる不具合を修正。
+  try {
+    const t=new TextDecoder('utf-8',{fatal:true}).decode(b);
+    return {text:t.replace(/^\\uFEFF/,''),enc:'UTF-8'};
+  } catch(e) {
+    try {
+      return {text:new TextDecoder('shift-jis').decode(b),enc:'Shift_JIS'};
+    } catch(e2) {
+      alert('文字コードを判定できませんでした。UTF-8またはShift_JISのTXT/TSVを選んでください。');
+      throw e2;
+    }
+  }
+}
+document.getElementById('folderInput').addEventListener('change',async(e)=>{
+ const files=[...e.target.files];
+ const textFile=files.find(f=>f.name.toLowerCase().endsWith('.tsv'))||files.find(f=>f.name.toLowerCase().endsWith('.txt'));
+ if(!textFile){alert('TSV/TXTが見つかりません');return;}
+ mp3Files={};jpMp3Files={};
+ // Files are grouped by folder path. Put English audio in an "en" or "english" folder,
+ // Japanese audio in a "jp" or "japanese" folder, or use *_en.mp3 / *_jp.mp3 suffixes.
+ const audioFiles=files.filter(f=>f.name.toLowerCase().endsWith('.mp3'));
+ const folderOf=f=>(f.webkitRelativePath||f.name).split('/').slice(-2,-1)[0]?.toLowerCase()||'';
+ for(const f of audioFiles){
+   const name=f.name.toLowerCase();
+   const folder=folderOf(f);
+   const isJP=/(^|[_-])(jp|ja|japanese|日本語)(?=\.)/i.test(name)||/(^|[_-])(jp|ja|japanese|日本語)$/.test(folder);
+   const isEN=/(^|[_-])(en|eng|english|英語)(?=\.)/i.test(name)||/(^|[_-])(en|eng|english|英語)$/.test(folder);
+   const key=name.replace(/([_-])(jp|ja|japanese|日本語|en|eng|english|英語)(?=\.mp3$)/i,'').replace(/\.mp3$/i,'');
+   if(isJP) jpMp3Files[key]=f;
+   else if(isEN) mp3Files[key]=f;
+   else mp3Files[key]=f;
+ }
+ const decoded=await decodeTextFile(textFile);loadedTextName=textFile.name;sourceTextName=textFile.name.replace(/\.(tsv|txt)$/i,'')+'_edited.tsv';overwriteHandle=null;document.getElementById('saveHelp').textContent='読み込んだ教材：'+loadedTextName+'。上書き保存する場合は「上書きする元ファイルを選択」で同じファイルを指定してください。';items=[];
+ let prevJp2='';
+ decoded.text.split(/\r?\n/).forEach(line=>{
+   if(!line.trim()) return;
+   if(line.includes('\t')){
+     const c=line.split('\t');let jp2=(c[2]||'').trim();
+     if(!jp2) jp2=prevJp2; else prevJp2=jp2;
+     items.push({eng:c[0]||'',jp:c[1]||'',jp2});
+   }else items.push({eng:line,jp:'',jp2:prevJp2});
+ });
+ statusEl.textContent=`${textFile.name} | 行数:${items.length} | 英語MP3:${Object.keys(mp3Files).length} | 日本語MP3:${Object.keys(jpMp3Files).length} | 文字コード:${decoded.enc}`;
+ document.getElementById('audioStatus').textContent='英語・日本語はそれぞれMP3があれば再生し、MP3がない場合は読み上げます（英語は「英語MP3のみ」を選ぶと例外）。音声ファイルは en / jp の別フォルダに分けてください。';
+ // 教材ごとに前回のNo.を保存・復元（同じブラウザ内）
+ const resumeKey='sentencePlayer:lastNo:'+textFile.name;
+ let savedNo=1;
+ try { savedNo=Number(localStorage.getItem(resumeKey))||1; } catch(e) {}
+ current=Math.min(Math.max(savedNo-1,0),Math.max(items.length-1,0));
+ const resumeInfo=document.getElementById('resumeInfo');
+ if(resumeInfo) resumeInfo.textContent=savedNo>1 ? `前回の学習位置：No.${current+1}（自動復元）` : '学習位置は自動保存されます';
+ try {const r=JSON.parse(localStorage.getItem('sentencePlayer:range:'+textFile.name)||localStorage.getItem('sentencePlayer:range:default')||'null');if(r){document.getElementById('rangeStart').value=r.start||1;document.getElementById('rangeEnd').value=Math.min(Number(r.end)||items.length,items.length);document.getElementById('rangeEnabled').checked=!!r.enabled;}} catch(e){}
+ if(Number(document.getElementById('rangeEnd').value)>items.length) document.getElementById('rangeEnd').value=items.length;
+ if(rangeActive()){const rg=getRange();if(current<rg.start||current>rg.end)current=rg.start;}
+ document.getElementById('rangeInfo').textContent=rangeActive()?`No.${document.getElementById('rangeStart').value}～No.${document.getElementById('rangeEnd').value}を繰り返し（設定は自動保存）`:'全範囲で再生（設定は自動保存）';
+ showItem();
+});
+function showItem(){
+ if(!items.length)return;
+ // 文を切り替えたときは編集画面を閉じ、通常表示に戻す
+ closeInlineEditor(false);
+ posEl.textContent=`No.${current+1} / ${items.length}`;
+ try {
+   if(loadedTextName) localStorage.setItem('sentencePlayer:lastNo:'+loadedTextName,String(current+1));
+   const resumeInfo=document.getElementById('resumeInfo');
+   if(resumeInfo) resumeInfo.textContent=`今回の学習位置：No.${current+1}（自動保存済み）`;
+ } catch(e) {
+   const resumeInfo=document.getElementById('resumeInfo');
+   if(resumeInfo) resumeInfo.textContent='このブラウザでは自動保存できません';
+ }
+ engEl.textContent=items[current].eng;
+ if(document.getElementById('showJapanese').checked){jpEl.textContent=items[current].jp;jp2El.textContent=items[current].jp2||'';}
+ else{jpEl.textContent='';jp2El.textContent='';}
+}
+function closeInlineEditor(save){
+ if(!editingField)return;
+ const {field,element,textarea}=editingField;
+ if(save && items[current]) {
+   items[current][field]=textarea.value;
+   statusEl.textContent += ' | 編集内容あり（元ファイルは未変更）';
+ }
+ editingField=null;
+ showItemDisplayOnly();
+}
+function showItemDisplayOnly(){
+ if(!items.length)return;
+ engEl.textContent=items[current].eng;
+ if(document.getElementById('showJapanese').checked){jpEl.textContent=items[current].jp;jp2El.textContent=items[current].jp2||'';}
+ else{jpEl.textContent='';jp2El.textContent='';}
+}
+function startInlineEdit(element){
+ if(!items.length || editingField)return;
+ const field=element.dataset.field;
+ if(field!=='eng' && !document.getElementById('showJapanese').checked)return;
+ const original=items[current][field]||'';
+ const wrap=document.createElement('div');
+ const textarea=document.createElement('textarea');
+ textarea.className='inline-editor';textarea.rows=Math.max(2,Math.min(6,Math.ceil(original.length/45)));
+ textarea.value=original;textarea.setAttribute('aria-label','選択した文を編集');
+ const actions=document.createElement('div');actions.className='edit-actions';
+ const save=document.createElement('button');save.textContent='保存';
+ const cancel=document.createElement('button');cancel.textContent='キャンセル';
+ actions.append(save,cancel);wrap.append(textarea,actions);
+ element.replaceChildren(wrap);
+ editingField={field,element,textarea};
+ save.onclick=()=>closeInlineEditor(true);
+ cancel.onclick=()=>closeInlineEditor(false);
+ textarea.focus();textarea.setSelectionRange(textarea.value.length,textarea.value.length);
+}
+[engEl,jpEl,jp2El].forEach(el=>el.addEventListener('click',()=>startInlineEdit(el)));
+document.getElementById('showJapanese').addEventListener('change',showItem);
+document.getElementById('saveEditedBtn').addEventListener('click',()=>{
+ if(editingField) closeInlineEditor(true);
+ if(!items.length){alert('先にTSV/TXT教材を読み込んでください。');return;}
+ const content=items.map(item=>[item.eng||'',item.jp||'',item.jp2||''].join('\t')).join('\r\n')+'\r\n';
+ const blob=new Blob(['\ufeff',content],{type:'text/tab-separated-values;charset=utf-8'});
+ const url=URL.createObjectURL(blob);const a=document.createElement('a');a.href=url;a.download=sourceTextName;a.style.display='none';document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),1000);
+ statusEl.textContent=statusEl.textContent.replace(/ \| 編集内容あり（元ファイルは未変更）/g,'')+' | 編集内容をTSV保存';
+});
+document.getElementById('chooseOverwriteBtn').addEventListener('click',async()=>{
+ if(!items.length){alert('先にTSV/TXT教材を読み込んでください。');return;}
+ if(!('showOpenFilePicker' in window)){
+   alert('このブラウザでは直接上書き保存に対応していません。ダウンロードした修正版HTMLを、最新版のEdgeまたはChromeで開いてください。');
+   return;
+ }
+ try{
+   // .tsv と .txt を別々のMIMEタイプとして指定し、Windowsの選択画面で
+   // ファイルが選択できない場合を避ける。
+   const handles=await window.showOpenFilePicker({
+     multiple:false,
+     excludeAcceptAllOption:false,
+     types:[
+       {description:'TSV教材',accept:{'text/tab-separated-values':['.tsv']}},
+       {description:'TXT教材',accept:{'text/plain':['.txt']}}
+     ]
+   });
+   if(!handles || !handles.length)return;
+   const h=handles[0];
+   // ファイル選択画面のフィルターでTSV/TXTを指定しているため、
+   // ブラウザが返す名前の形式に依存した拡張子チェックは行わない。
+   if(h.name!==loadedTextName){
+     alert('選択したファイル名が読み込んだ教材と異なります。\\n読み込んだファイル：'+loadedTextName+'\\n選択したファイル：'+h.name+'\\n\\n教材フォルダを選択したときに読み込まれたファイル名を確認してください。');
+     overwriteHandle=null;
+     return;
+   }
+   overwriteHandle=h;
+   document.getElementById('saveHelp').textContent='上書き対象：'+h.name+'。内容を確認して「上書き保存」を押してください。';
+ }catch(err){
+   if(err.name!=='AbortError')alert('ファイルを選択できませんでした：'+(err.message||err));
+ }
+});
+document.getElementById('overwriteBtn').addEventListener('click',async()=>{
+ if(editingField) closeInlineEditor(true);
+ if(!items.length){alert('先にTSV/TXT教材を読み込んでください。');return;}
+ if(!overwriteHandle){alert('先に「上書きする元ファイルを選択」を押し、読み込んだ教材と同じファイルを選んでください。');return;}
+ if(!confirm('「'+overwriteHandle.name+'」を編集内容で上書きします。\n元の内容は失われます。続けますか？'))return;
+ try{if((await overwriteHandle.queryPermission({mode:'readwrite'}))!=='granted'){const permission=await overwriteHandle.requestPermission({mode:'readwrite'});if(permission!=='granted'){alert('書き込み許可が得られませんでした。');return;}}
+ const content=items.map(item=>[item.eng||'',item.jp||'',item.jp2||''].join('\t')).join('\r\n')+'\r\n';const writable=await overwriteHandle.createWritable();await writable.write(new Blob(['\ufeff',content],{type:'text/tab-separated-values;charset=utf-8'}));await writable.close();statusEl.textContent=statusEl.textContent.replace(/ \| 編集内容あり（元ファイルは未変更）/g,'')+' | '+overwriteHandle.name+' に上書き保存しました';alert('上書き保存しました。');
+ }catch(err){alert('上書き保存に失敗しました：'+err.message+'\n「別ファイルとして保存」も利用できます。');}
+});
+function numberedKey(i){
+ const n=i+1;
+ return [`${n}`,String(n).padStart(2,'0'),String(n).padStart(3,'0'),String(n).padStart(4,'0')];
+}
+function findInMap(map,i){
+ const keys=numberedKey(i);
+ for(const k of keys){if(map[k]) return URL.createObjectURL(map[k]);}
+ // Also tolerate numbered filenames with language suffixes.
+ for(const k of keys){for(const suffix of ['_en','-en','_eng','-eng','_english','-english','_jp','-jp','_ja','-ja','_japanese','-japanese']) if(map[k+suffix]) return URL.createObjectURL(map[k+suffix]);}
+ return null;
+}
+function findMp3(i){return findInMap(mp3Files,i);}
+function findJpMp3(i){return findInMap(jpMp3Files,i);}
+function updateRepeat(max){document.getElementById('repeatInfo').textContent=`${repeatCount}/${max===9999?'∞':max}`;}
+function rangeActive(){return document.getElementById('rangeEnabled').checked && items.length>0;}
+function saveRangeSettings(start,end,enabled){
+ const data=JSON.stringify({enabled:!!enabled,start:Number(start),end:Number(end)});
+ try{localStorage.setItem('sentencePlayer:range:default',data);if(loadedTextName)localStorage.setItem('sentencePlayer:range:'+loadedTextName,data);}catch(e){const info=document.getElementById('rangeInfo');if(info)info.textContent='設定を保存できませんでした（ブラウザの保存設定を確認）';}
+}
+function autoSaveRangeSettings(){
+ if(!items.length)return;
+ const a=Number(document.getElementById('rangeStart').value),b=Number(document.getElementById('rangeEnd').value);
+ if(Number.isInteger(a)&&Number.isInteger(b)&&a>=1&&b>=a&&b<=items.length)saveRangeSettings(a,b,rangeActive());
+}
+function getRange(){
+ let start=Number(document.getElementById('rangeStart').value)||1;
+ let end=Number(document.getElementById('rangeEnd').value)||items.length;
+ start=Math.max(1,Math.min(items.length,start)); end=Math.max(1,Math.min(items.length,end));
+ return {start:start-1,end:end-1};
+}
+function applyRange(){
+ if(!items.length){document.getElementById('rangeInfo').textContent='教材を読み込んでください';return;}
+ let a=Number(document.getElementById('rangeStart').value),b=Number(document.getElementById('rangeEnd').value);
+ if(!Number.isInteger(a)||!Number.isInteger(b)||a<1||b<a||b>items.length){alert(`開始No.と終了No.を1～${items.length}の範囲で設定してください（開始No.は終了No.以下）。`);return;}
+ saveRangeSettings(a,b,rangeActive());
+ document.getElementById('rangeInfo').textContent=rangeActive()?`No.${a}～No.${b}を繰り返し（設定は自動保存）`: '全範囲で再生（設定は自動保存）';
+ if(rangeActive()) {const {start,end}=getRange();if(current<start||current>end){stopAll();current=start;showItem();}}
+}
+function advanceIndex(direction){
+ if(!items.length)return;
+ if(rangeActive()) {const {start,end}=getRange(); if(direction>0) current=current>=end?start:current+1; else current=current<=start?end:current-1;}
+ else {current=(current+direction+items.length)%items.length;}
+}
+function stopAll(){playToken++;audio.pause();audio.currentTime=0;speechSynthesis.cancel();}
+function buildSequence(){
+ const seq=document.getElementById('sequenceMode').value;
+ sequenceParts=seq==='en-only'?['en']:seq==='en-jp-en'?['en','jp','en']:seq==='jp-en'?['jp','en']:['en','jp'];
+ sequenceParts=sequenceParts.filter(part=>part!=='jp'||document.getElementById('jpMode').value!=='off');
+ sequenceIndex=0;
+}
+function playPart(part,token){
+ if(token!==playToken||!items.length)return;
+ const isJP=part==='jp';
+ const text=isJP?(items[current].jp||items[current].jp2||''):items[current].eng;
+ if(!text.trim()){finishPart(token);return;}
+ const mode=isJP?document.getElementById('jpMode').value:document.getElementById('playMode').value;
+ const src=isJP?findJpMp3(current):findMp3(current);
+ if(mode==='off'){finishPart(token);return;}
+ // Japanese defaults to text-to-speech automatically when its MP3 is missing.
+ if(mode!=='tts'&&src){
+   audio.src=src;audio.playbackRate=Number(document.getElementById('speedSelect').value);
+   audio.onended=()=>finishPart(token);
+   audio.onerror=()=>{if(token===playToken)finishPart(token);};
+   audio.play().catch(()=>finishPart(token));
+   return;
+ }
+ if(!isJP&&mode==='mp3'&&!src){alert('英語 MP3が見つかりません：'+String(current+1));finishPart(token);return;}
+ const utterance=new SpeechSynthesisUtterance(text);
+ const selectedVoice=voices[Number(document.getElementById('voiceSelect').value)];
+ const languageVoice=isJP?voices.find(v=>v.lang.toLowerCase().startsWith('ja')):selectedVoice;
+ if(languageVoice){utterance.voice=languageVoice;utterance.lang=languageVoice.lang;}
+ else {utterance.lang=isJP?'ja-JP':(selectedVoice?.lang||'en-US');}
+ utterance.rate=Number(document.getElementById('speedSelect').value);
+ utterance.onend=()=>finishPart(token);
+ utterance.onerror=()=>finishPart(token);
+ speechSynthesis.speak(utterance);
+}
+function finishPart(token){
+ if(token!==playToken)return;
+ sequenceIndex++;
+ if(sequenceIndex<sequenceParts.length){playPart(sequenceParts[sequenceIndex],token);return;}
+ const max=Number(document.getElementById('repeatSelect').value);
+ repeatCount++;updateRepeat(max);
+ if(repeatCount<max){sequenceIndex=0;playPart(sequenceParts[sequenceIndex],token);return;}
+ repeatCount=0;updateRepeat(max);
+ advanceIndex(1);showItem();
+ buildSequence();playPart(sequenceParts[0],token);
+}
+function playCurrent(){
+ if(!items.length)return;
+ stopAll();repeatCount=0;updateRepeat(Number(document.getElementById('repeatSelect').value));
+ buildSequence();playPart(sequenceParts[0],playToken);
+}
+document.getElementById('playBtn').onclick=playCurrent;
+document.getElementById('stopBtn').onclick=stopAll;
+document.getElementById('nextBtn').onclick=()=>{if(items.length){const wasPlaying=!!(audio.src&&!audio.paused)||speechSynthesis.speaking;stopAll();advanceIndex(1);showItem();if(wasPlaying){playCurrent();}}};
+document.getElementById('prevBtn').onclick=()=>{if(items.length){const wasPlaying=!!(audio.src&&!audio.paused)||speechSynthesis.speaking;stopAll();advanceIndex(-1);showItem();if(wasPlaying){playCurrent();}}};
+document.getElementById('jumpBtn').onclick=()=>{stopAll();const n=Number(document.getElementById('jumpInput').value);if(n>=1&&n<=items.length){current=n-1;showItem();}};
+document.getElementById('applyRangeBtn').onclick=applyRange;
+document.getElementById('rangeEnabled').addEventListener('change',applyRange);
+document.getElementById('rangeStart').addEventListener('change',autoSaveRangeSettings);
+document.getElementById('rangeEnd').addEventListener('change',autoSaveRangeSettings);
+
+</script></body></html>
