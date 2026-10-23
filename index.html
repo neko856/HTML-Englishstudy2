@@ -71,6 +71,17 @@ button,input,select{font-size:14px;padding:6px;margin:4px}
   <div id="sentenceDisplay">
     <div id="eng" class="editable-text" data-field="eng" title="クリックして編集"></div><div id="jp" class="editable-text" data-field="jp" title="クリックして編集"></div><div id="jp2" class="editable-text" data-field="jp2" title="クリックして編集"></div><div class="edit-hint">英文・日本語文をクリックすると、その文だけ編集できます。</div>
   </div>
+  <div id="tagControls" style="margin:10px 0;padding:8px;border:1px solid #ddd;border-radius:6px;font-size:14px">
+    <strong>この文の判定：</strong>
+    <label style="margin-left:8px"><input type="checkbox" id="tagOK"> OK</label>
+    <label style="margin-left:8px"><input type="checkbox" id="tagNG"> NG</label>
+    <span id="tagSaveInfo" style="font-size:12px;color:#555;margin-left:8px">チェックするとD列に保存されます</span>
+    <div style="margin-top:8px">
+      <label for="tagFilter"><strong>再生する文：</strong></label>
+      <select id="tagFilter"><option value="ALL">すべて</option><option value="OK">OKだけ</option><option value="NG">NGだけ</option></select>
+      <span id="tagFilterInfo" style="font-size:12px;color:#555"></span>
+    </div>
+  </div>
   <p id="repeatRow">再生回数 <span id="repeatInfo">0/0</span></p>
     <div id="rangeControls"><label><input type="checkbox" id="rangeEnabled"> 範囲リピート</label><label>開始No. <input id="rangeStart" type="number" min="1" value="1"></label><label>終了No. <input id="rangeEnd" type="number" min="1" value="10"></label><button id="applyRangeBtn" type="button">範囲を設定</button><span id="rangeInfo" style="font-size:13px;color:#42624a">全範囲で再生</span></div>
   <div id="playSettings">
@@ -132,8 +143,8 @@ document.getElementById('textFileInput').addEventListener('change',async(e)=>{
   let prevJp2='';
   decoded.text.split(/\r?\n/).forEach(line=>{
    if(!line.trim())return;
-   if(line.includes('\t')){const c=line.split('\t');let jp2=(c[2]||'').trim();if(!jp2)jp2=prevJp2;else prevJp2=jp2;items.push({eng:c[0]||'',jp:c[1]||'',jp2});}
-   else items.push({eng:line,jp:'',jp2:prevJp2});
+   if(line.includes('\t')){const c=line.split('\t');let jp2=(c[2]||'').trim();if(!jp2)jp2=prevJp2;else prevJp2=jp2;items.push({eng:c[0]||'',jp:c[1]||'',jp2,tag:/^(OK|NG)$/i.test((c[3]||'').trim())?(c[3]||'').trim().toUpperCase():''});}
+   else items.push({eng:line,jp:'',jp2:prevJp2,tag:''});
   });
   let savedNo=1;try{savedNo=Number(localStorage.getItem('sentencePlayer:lastNo:'+f.name))||1;}catch(err){}
   current=Math.min(Math.max(savedNo-1,0),Math.max(items.length-1,0));
@@ -174,8 +185,8 @@ document.getElementById('folderInput').addEventListener('change',async(e)=>{
    if(line.includes('\t')){
      const c=line.split('\t');let jp2=(c[2]||'').trim();
      if(!jp2) jp2=prevJp2; else prevJp2=jp2;
-     items.push({eng:c[0]||'',jp:c[1]||'',jp2});
-   }else items.push({eng:line,jp:'',jp2:prevJp2});
+     items.push({eng:c[0]||'',jp:c[1]||'',jp2,tag:/^(OK|NG)$/i.test((c[3]||'').trim())?(c[3]||'').trim().toUpperCase():''});
+   }else items.push({eng:line,jp:'',jp2:prevJp2,tag:''});
  });
  statusEl.textContent=`${textFile.name} | 行数:${items.length} | 英語MP3:${Object.keys(mp3Files).length} | 日本語MP3:${Object.keys(jpMp3Files).length} | 文字コード:${decoded.enc}`;
  document.getElementById('audioStatus').textContent='英語・日本語はそれぞれMP3があれば再生し、MP3がない場合は読み上げます（英語は「英語MP3のみ」を選ぶと例外）。音声ファイルは en / jp の別フォルダに分けてください。';
@@ -192,11 +203,44 @@ document.getElementById('folderInput').addEventListener('change',async(e)=>{
  document.getElementById('rangeInfo').textContent=rangeActive()?`No.${document.getElementById('rangeStart').value}～No.${document.getElementById('rangeEnd').value}を繰り返し（設定は自動保存）`:'全範囲で再生（設定は自動保存）';
  showItem();
 });
+function currentTagFilter(){return document.getElementById('tagFilter')?.value||'ALL';}
+function matchesTag(i){const f=currentTagFilter();return f==='ALL'||(items[i]&&items[i].tag===f);}
+function matchingIndexes(){
+ const {start,end}=rangeActive()?getRange():{start:0,end:Math.max(0,items.length-1)};
+ const out=[];for(let i=start;i<=end&&i<items.length;i++)if(matchesTag(i))out.push(i);return out;
+}
+function updateTagControls(){
+ const item=items[current];if(!item)return;
+ document.getElementById('tagOK').checked=item.tag==='OK';
+ document.getElementById('tagNG').checked=item.tag==='NG';
+ const ids=matchingIndexes().length;
+ document.getElementById('tagFilterInfo').textContent=`該当 ${ids} 文`;
+}
+function setCurrentTag(tag){
+ if(!items.length)return;
+ items[current].tag=(items[current].tag===tag)?'':tag;
+ updateTagControls();
+ const f=currentTagFilter();
+ if(f!=='ALL'&&!matchesTag(current)){
+   const indexes=matchingIndexes();
+   if(indexes.length){current=indexes[0];showItem();}
+   else {showItem();}
+ }else showItem();
+}
+document.getElementById('tagOK').addEventListener('change',()=>setCurrentTag('OK'));
+document.getElementById('tagNG').addEventListener('change',()=>setCurrentTag('NG'));
+document.getElementById('tagFilter').addEventListener('change',()=>{
+ if(!items.length)return;
+ const indexes=matchingIndexes();
+ if(indexes.length&&!matchesTag(current))current=indexes[0];
+ stopAll();showItem();
+});
 function showItem(){
  if(!items.length)return;
  // 文を切り替えたときは編集画面を閉じ、通常表示に戻す
  closeInlineEditor(false);
  posEl.textContent=`No.${current+1} / ${items.length}`;
+ updateTagControls();
  try {
    if(loadedTextName) localStorage.setItem('sentencePlayer:lastNo:'+loadedTextName,String(current+1));
    const resumeInfo=document.getElementById('resumeInfo');
@@ -249,7 +293,7 @@ document.getElementById('showJapanese').addEventListener('change',showItem);
 document.getElementById('saveEditedBtn').addEventListener('click',()=>{
  if(editingField) closeInlineEditor(true);
  if(!items.length){alert('先にTSV/TXT教材を読み込んでください。');return;}
- const content=items.map(item=>[item.eng||'',item.jp||'',item.jp2||''].join('\t')).join('\r\n')+'\r\n';
+ const content=items.map(item=>[item.eng||'',item.jp||'',item.jp2||'',item.tag||''].join('\t')).join('\r\n')+'\r\n';
  const blob=new Blob(['\ufeff',content],{type:'text/tab-separated-values;charset=utf-8'});
  const url=URL.createObjectURL(blob);const a=document.createElement('a');a.href=url;a.download=sourceTextName;a.style.display='none';document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),1000);
  statusEl.textContent=statusEl.textContent.replace(/ \| 編集内容あり（元ファイルは未変更）/g,'')+' | 編集内容をTSV保存';
@@ -292,7 +336,7 @@ document.getElementById('overwriteBtn').addEventListener('click',async()=>{
  if(!overwriteHandle){alert('先に「上書きする元ファイルを選択」を押し、読み込んだ教材と同じファイルを選んでください。');return;}
  if(!confirm('「'+overwriteHandle.name+'」を編集内容で上書きします。\n元の内容は失われます。続けますか？'))return;
  try{if((await overwriteHandle.queryPermission({mode:'readwrite'}))!=='granted'){const permission=await overwriteHandle.requestPermission({mode:'readwrite'});if(permission!=='granted'){alert('書き込み許可が得られませんでした。');return;}}
- const content=items.map(item=>[item.eng||'',item.jp||'',item.jp2||''].join('\t')).join('\r\n')+'\r\n';const writable=await overwriteHandle.createWritable();await writable.write(new Blob(['\ufeff',content],{type:'text/tab-separated-values;charset=utf-8'}));await writable.close();statusEl.textContent=statusEl.textContent.replace(/ \| 編集内容あり（元ファイルは未変更）/g,'')+' | '+overwriteHandle.name+' に上書き保存しました';alert('上書き保存しました。');
+ const content=items.map(item=>[item.eng||'',item.jp||'',item.jp2||'',item.tag||''].join('\t')).join('\r\n')+'\r\n';const writable=await overwriteHandle.createWritable();await writable.write(new Blob(['\ufeff',content],{type:'text/tab-separated-values;charset=utf-8'}));await writable.close();statusEl.textContent=statusEl.textContent.replace(/ \| 編集内容あり（元ファイルは未変更）/g,'')+' | '+overwriteHandle.name+' に上書き保存しました';alert('上書き保存しました。');
  }catch(err){alert('上書き保存に失敗しました：'+err.message+'\n「別ファイルとして保存」も利用できます。');}
 });
 function numberedKey(i){
@@ -335,6 +379,15 @@ function applyRange(){
 }
 function advanceIndex(direction){
  if(!items.length)return;
+ const filtered=currentTagFilter()!=='ALL';
+ if(filtered){
+   const indexes=matchingIndexes();
+   if(!indexes.length)return;
+   const at=indexes.indexOf(current);
+   if(at<0){current=direction>0?indexes[0]:indexes[indexes.length-1];return;}
+   current=indexes[(at+direction+indexes.length)%indexes.length];
+   return;
+ }
  if(rangeActive()) {const {start,end}=getRange(); if(direction>0) current=current>=end?start:current+1; else current=current<=start?end:current-1;}
  else {current=(current+direction+items.length)%items.length;}
 }
@@ -385,6 +438,12 @@ function finishPart(token){
 }
 function playCurrent(){
  if(!items.length)return;
+ if(currentTagFilter()!=='ALL'){
+   const indexes=matchingIndexes();
+   if(!indexes.length){alert('選択したOK/NGに該当する文がありません。');return;}
+   if(!matchesTag(current))current=indexes[0];
+   showItem();
+ }
  stopAll();repeatCount=0;updateRepeat(Number(document.getElementById('repeatSelect').value));
  buildSequence();playPart(sequenceParts[0],playToken);
 }
