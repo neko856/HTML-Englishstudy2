@@ -90,7 +90,7 @@ button,input,select{font-size:14px;padding:6px;margin:4px}
     <label>速度 <select id="speedSelect"><option>0.5</option><option>0.7</option><option>0.8</option><option>0.9</option><option selected>1.0</option><option>1.2</option><option>1.5</option><option>2.0</option></select></label>
     <label>再生方式 <select id="playMode"><option value="auto" selected>英語MP3／なければ読み上げ</option><option value="mp3">英語MP3のみ</option><option value="tts">英語読み上げ</option></select></label>
     <label>日本語音声 <select id="jpMode"><option value="mp3" selected>MP3優先（なければ読み上げ）</option><option value="tts">日本語読み上げ</option><option value="off">再生しない</option></select></label>
-    <label>順序 <select id="sequenceMode"><option value="en-only">英語だけ</option><option value="en-jp">英語→日本語</option><option value="en-jp-en">英語→日本語→英語</option><option value="jp-en">日本語→英語</option></select></label>
+    <label>順序 <select id="sequenceMode"><option value="en-only">英語だけ</option><option value="en-jp">英語→日本語</option><option value="en-jp-en">英語→日本語→英語</option><option value="en-jp-en-en">英語→日本語→英語→英語</option><option value="jp-en">日本語→英語</option></select></label>
     <label>音声 <select id="voiceSelect"></select></label>
     <label><input type="checkbox" id="showJapanese" checked>日本語表示</label>
   </div>
@@ -403,7 +403,7 @@ function advanceIndex(direction){
 function stopAll(){playToken++;audio.pause();audio.currentTime=0;speechSynthesis.cancel();}
 function buildSequence(){
  const seq=document.getElementById('sequenceMode').value;
- sequenceParts=seq==='en-only'?['en']:seq==='en-jp-en'?['en','jp','en']:seq==='jp-en'?['jp','en']:['en','jp'];
+ sequenceParts=seq==='en-only'?['en']:seq==='en-jp-en'?['en','jp','en']:seq==='en-jp-en-en'?['en','jp','en','en']:seq==='jp-en'?['jp','en']:['en','jp'];
  sequenceParts=sequenceParts.filter(part=>part!=='jp'||document.getElementById('jpMode').value!=='off');
  sequenceIndex=0;
 }
