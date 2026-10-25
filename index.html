@@ -75,10 +75,11 @@ button,input,select{font-size:14px;padding:6px;margin:4px}
     <strong>この文の判定：</strong>
     <label style="margin-left:8px"><input type="checkbox" id="tagOK"> OK</label>
     <label style="margin-left:8px"><input type="checkbox" id="tagNG"> NG</label>
+     <label style="margin-left:8px"><input type="checkbox" id="tagDash"> -</label>
     <span id="tagSaveInfo" style="font-size:12px;color:#555;margin-left:8px">チェックするとD列に保存されます</span>
     <div style="margin-top:8px">
       <label for="tagFilter"><strong>再生する文：</strong></label>
-      <select id="tagFilter"><option value="ALL">すべて</option><option value="OK">OKだけ</option><option value="NG">NGだけ</option></select>
+      <select id="tagFilter"><option value="ALL">すべて</option><option value="OK">OKだけ</option><option value="NG">NGだけ</option><option value="OKNG">OKとNG</option><option value="DASH">-だけ</option></select>
       <span id="tagFilterInfo" style="font-size:12px;color:#555"></span>
     </div>
   </div>
@@ -143,7 +144,7 @@ document.getElementById('textFileInput').addEventListener('change',async(e)=>{
   let prevJp2='';
   decoded.text.split(/\r?\n/).forEach(line=>{
    if(!line.trim())return;
-   if(line.includes('\t')){const c=line.split('\t');let jp2=(c[2]||'').trim();if(!jp2)jp2=prevJp2;else prevJp2=jp2;items.push({eng:c[0]||'',jp:c[1]||'',jp2,tag:/^(OK|NG)$/i.test((c[3]||'').trim())?(c[3]||'').trim().toUpperCase():''});}
+   if(line.includes('\t')){const c=line.split('\t');let jp2=(c[2]||'').trim();if(!jp2)jp2=prevJp2;else prevJp2=jp2;items.push({eng:c[0]||'',jp:c[1]||'',jp2,tag:/^(OK|NG|-)$/i.test((c[3]||'').trim())?(c[3]||'').trim().toUpperCase():''});}
    else items.push({eng:line,jp:'',jp2:prevJp2,tag:''});
   });
   let savedNo=1;try{savedNo=Number(localStorage.getItem('sentencePlayer:lastNo:'+f.name))||1;}catch(err){}
@@ -185,7 +186,7 @@ document.getElementById('folderInput').addEventListener('change',async(e)=>{
    if(line.includes('\t')){
      const c=line.split('\t');let jp2=(c[2]||'').trim();
      if(!jp2) jp2=prevJp2; else prevJp2=jp2;
-     items.push({eng:c[0]||'',jp:c[1]||'',jp2,tag:/^(OK|NG)$/i.test((c[3]||'').trim())?(c[3]||'').trim().toUpperCase():''});
+     items.push({eng:c[0]||'',jp:c[1]||'',jp2,tag:/^(OK|NG|-)$/i.test((c[3]||'').trim())?(c[3]||'').trim().toUpperCase():''});
    }else items.push({eng:line,jp:'',jp2:prevJp2,tag:''});
  });
  statusEl.textContent=`${textFile.name} | 行数:${items.length} | 英語MP3:${Object.keys(mp3Files).length} | 日本語MP3:${Object.keys(jpMp3Files).length} | 文字コード:${decoded.enc}`;
@@ -204,7 +205,13 @@ document.getElementById('folderInput').addEventListener('change',async(e)=>{
  showItem();
 });
 function currentTagFilter(){return document.getElementById('tagFilter')?.value||'ALL';}
-function matchesTag(i){const f=currentTagFilter();return f==='ALL'||(items[i]&&items[i].tag===f);}
+function matchesTag(i){
+ const f=currentTagFilter(),tag=items[i]?.tag||'';
+ if(f==='ALL')return true;
+ if(f==='OKNG')return tag==='OK'||tag==='NG';
+ if(f==='DASH')return tag==='-';
+ return tag===f;
+}
 function matchingIndexes(){
  const {start,end}=rangeActive()?getRange():{start:0,end:Math.max(0,items.length-1)};
  const out=[];for(let i=start;i<=end&&i<items.length;i++)if(matchesTag(i))out.push(i);return out;
@@ -213,6 +220,7 @@ function updateTagControls(){
  const item=items[current];if(!item)return;
  document.getElementById('tagOK').checked=item.tag==='OK';
  document.getElementById('tagNG').checked=item.tag==='NG';
+  document.getElementById('tagDash').checked=item.tag==='-';
  const ids=matchingIndexes().length;
  document.getElementById('tagFilterInfo').textContent=`該当 ${ids} 文`;
 }
@@ -229,6 +237,7 @@ function setCurrentTag(tag){
 }
 document.getElementById('tagOK').addEventListener('change',()=>setCurrentTag('OK'));
 document.getElementById('tagNG').addEventListener('change',()=>setCurrentTag('NG'));
+document.getElementById('tagDash').addEventListener('change',()=>setCurrentTag('-'));
 document.getElementById('tagFilter').addEventListener('change',()=>{
  if(!items.length)return;
  const indexes=matchingIndexes();
@@ -440,7 +449,7 @@ function playCurrent(){
  if(!items.length)return;
  if(currentTagFilter()!=='ALL'){
    const indexes=matchingIndexes();
-   if(!indexes.length){alert('選択したOK/NGに該当する文がありません。');return;}
+   if(!indexes.length){alert('選択した判定に該当する文がありません。');return;}
    if(!matchesTag(current))current=indexes[0];
    showItem();
  }
