@@ -76,7 +76,7 @@ button,input,select{font-size:14px;padding:6px;margin:4px}
     <label style="margin-left:8px"><input type="checkbox" id="tagOK"> OK</label>
     <label style="margin-left:8px"><input type="checkbox" id="tagNG"> NG</label>
      <label style="margin-left:8px"><input type="checkbox" id="tagDash"> -</label>
-    <span id="tagSaveInfo" style="font-size:12px;color:#555;margin-left:8px">チェックするとD列に保存されます</span>
+    <span id="tagSaveInfo" style="font-size:12px;color:#555;margin-left:8px">判定はブラウザに自動保存されます</span>
     <div style="margin-top:8px">
       <label for="tagFilter"><strong>再生する文：</strong></label>
       <select id="tagFilter"><option value="ALL">すべて</option><option value="OK">OKだけ</option><option value="NG">NGだけ</option><option value="OKNG">OKとNG</option><option value="DASH">-だけ</option></select>
@@ -87,7 +87,8 @@ button,input,select{font-size:14px;padding:6px;margin:4px}
     <div id="rangeControls"><label><input type="checkbox" id="rangeEnabled"> 範囲リピート</label><label>開始No. <input id="rangeStart" type="number" min="1" value="1"></label><label>終了No. <input id="rangeEnd" type="number" min="1" value="10"></label><button id="applyRangeBtn" type="button">範囲を設定</button><span id="rangeInfo" style="font-size:13px;color:#42624a">全範囲で再生</span></div>
   <div id="playSettings">
     <label>リピート <select id="repeatSelect"><option>1</option><option>3</option><option selected>5</option><option>10</option><option>20</option><option>30</option><option>50</option><option>100</option><option value="9999">∞</option></select></label>
-    <label>速度 <select id="speedSelect"><option>0.5</option><option>0.7</option><option>0.8</option><option>0.9</option><option selected>1.0</option><option>1.2</option><option>1.5</option><option>2.0</option></select></label>
+    <label>英文速度 <select id="speedEnSelect"><option>0.5</option><option>0.7</option><option>0.8</option><option>0.9</option><option selected>1.0</option><option>1.2</option><option>1.5</option><option>2.0</option></select></label>
+    <label>日本文速度 <select id="speedJpSelect"><option>0.5</option><option>0.7</option><option>0.8</option><option>0.9</option><option selected>1.0</option><option>1.2</option><option>1.5</option><option>2.0</option></select></label>
     <label>再生方式 <select id="playMode"><option value="auto" selected>英語MP3／なければ読み上げ</option><option value="mp3">英語MP3のみ</option><option value="tts">英語読み上げ</option></select></label>
     <label>日本語音声 <select id="jpMode"><option value="mp3" selected>MP3優先（なければ読み上げ）</option><option value="tts">日本語読み上げ</option><option value="off">再生しない</option></select></label>
     <label>順序 <select id="sequenceMode"><option value="en-only">英語だけ</option><option value="en-jp">英語→日本語</option><option value="en-jp-en">英語→日本語→英語</option><option value="en-jp-en-en">英語→日本語→英語→英語</option><option value="jp-en">日本語→英語</option></select></label>
@@ -117,7 +118,49 @@ const engEl=document.getElementById('eng');
 const jpEl=document.getElementById('jp');
 const jp2El=document.getElementById('jp2');
 function loadVoices(){voices=speechSynthesis.getVoices();const s=document.getElementById('voiceSelect');const old=s.value;s.innerHTML='';voices.forEach((v,i)=>{const o=document.createElement('option');o.value=i;o.textContent=`${v.name} (${v.lang})`;s.appendChild(o)});const e=voices.findIndex(v=>v.lang.startsWith('en'));if(e>=0)s.value=e;}
-loadVoices();speechSynthesis.onvoiceschanged=loadVoices;
+function savePlayerSettings(){
+  const ids=['repeatSelect','speedEnSelect','speedJpSelect','playMode','jpMode','sequenceMode','tagFilter','showJapanese'];
+  const data={};
+  ids.forEach(id=>{const el=document.getElementById(id);if(el)data[id]=el.type==='checkbox'?el.checked:el.value;});
+  const v=voices[Number(document.getElementById('voiceSelect').value)];
+  if(v){data.voiceName=v.name;data.voiceLang=v.lang;}
+  try{
+    const key=loadedTextName?'sentencePlayer:settings:'+loadedTextName:'sentencePlayer:settings';
+    localStorage.setItem(key,JSON.stringify(data));
+  }catch(e){}
+}
+function loadPlayerSettings(){
+  let data={};try{data=JSON.parse(localStorage.getItem('sentencePlayer:settings')||'{}');}catch(e){}
+  applyPlayerSettingsData(data);
+}
+function applyPlayerSettingsData(data){
+  if(data.speedSelect!==undefined){if(data.speedEnSelect===undefined)data.speedEnSelect=data.speedSelect;if(data.speedJpSelect===undefined)data.speedJpSelect=data.speedSelect;}
+  ['repeatSelect','speedEnSelect','speedJpSelect','playMode','jpMode','sequenceMode','tagFilter','showJapanese'].forEach(id=>{
+    const el=document.getElementById(id);if(!el||data[id]===undefined)return;
+    if(el.type==='checkbox')el.checked=!!data[id];
+    else if([...el.options].some(o=>o.value===String(data[id])))el.value=String(data[id]);
+  });
+  if(data.voiceName){const i=voices.findIndex(v=>v.name===data.voiceName&&v.lang===data.voiceLang);if(i>=0)document.getElementById('voiceSelect').value=String(i);}
+}
+loadVoices();loadPlayerSettings();speechSynthesis.onvoiceschanged=()=>{loadVoices();if(loadedTextName)restoreSettingsForCurrentFile();else loadPlayerSettings();};
+['repeatSelect','speedEnSelect','speedJpSelect','playMode','jpMode','sequenceMode','tagFilter','showJapanese','voiceSelect'].forEach(id=>{
+ const el=document.getElementById(id);if(el)el.addEventListener('change',savePlayerSettings);
+});
+function restoreSettingsForCurrentFile(){
+  if(!loadedTextName)return;
+  let data=null;try{const raw=localStorage.getItem('sentencePlayer:settings:'+loadedTextName);if(raw!==null)data=JSON.parse(raw);}catch(e){}
+  if(data)applyPlayerSettingsData(data);else loadPlayerSettings();
+  // 範囲リピートも教材名ごとに独立して復元。未設定の教材には他教材の範囲を流用しない。
+  let r=null;try{const raw=localStorage.getItem('sentencePlayer:range:'+loadedTextName);if(raw!==null)r=JSON.parse(raw);}catch(e){}
+  const startEl=document.getElementById('rangeStart'),endEl=document.getElementById('rangeEnd'),enabledEl=document.getElementById('rangeEnabled');
+  if(r){startEl.value=r.start||1;endEl.value=Math.min(Number(r.end)||items.length||1,Math.max(items.length,1));enabledEl.checked=!!r.enabled;}
+  else {startEl.value=1;endEl.value=Math.max(items.length,1);enabledEl.checked=false;}
+  if(Number(endEl.value)>items.length&&items.length)endEl.value=items.length;
+  if(rangeActive()){const rg=getRange();if(current<rg.start||current>rg.end)current=rg.start;}
+  document.getElementById('rangeInfo').textContent=rangeActive()?`No.${startEl.value}～No.${endEl.value}を繰り返し（教材ごとに自動保存）`:'全範囲で再生（教材ごとに自動保存）';
+  updateTagControls();
+}
+
 async function decodeTextFile(file){
   const b=await file.arrayBuffer();
   // UTF-8は「空白があるか」ではなく、バイト列が正しいUTF-8かで判定する。
@@ -147,13 +190,11 @@ document.getElementById('textFileInput').addEventListener('change',async(e)=>{
    if(line.includes('\t')){const c=line.split('\t');let jp2=(c[2]||'').trim();if(!jp2)jp2=prevJp2;else prevJp2=jp2;items.push({eng:c[0]||'',jp:c[1]||'',jp2,tag:/^(OK|NG|-)$/i.test((c[3]||'').trim())?(c[3]||'').trim().toUpperCase():''});}
    else items.push({eng:line,jp:'',jp2:prevJp2,tag:''});
   });
+  restoreTagsForCurrentFile();
   let savedNo=1;try{savedNo=Number(localStorage.getItem('sentencePlayer:lastNo:'+f.name))||1;}catch(err){}
   current=Math.min(Math.max(savedNo-1,0),Math.max(items.length-1,0));
   const ri=document.getElementById('resumeInfo');if(ri)ri.textContent=savedNo>1?`前回の学習位置：No.${current+1}（自動復元）`:'学習位置は自動保存されます';
-  try{const r=JSON.parse(localStorage.getItem('sentencePlayer:range:'+f.name)||localStorage.getItem('sentencePlayer:range:default')||'null');if(r){document.getElementById('rangeStart').value=r.start||1;document.getElementById('rangeEnd').value=Math.min(Number(r.end)||items.length,items.length);document.getElementById('rangeEnabled').checked=!!r.enabled;}}catch(err){}
-  if(Number(document.getElementById('rangeEnd').value)>items.length)document.getElementById('rangeEnd').value=items.length;
-  if(rangeActive()){const rg=getRange();if(current<rg.start||current>rg.end)current=rg.start;}
-  document.getElementById('rangeInfo').textContent=rangeActive()?`No.${document.getElementById('rangeStart').value}～No.${document.getElementById('rangeEnd').value}を繰り返し（設定は自動保存）`:'全範囲で再生（設定は自動保存）';
+  restoreSettingsForCurrentFile();
   statusEl.textContent=`${f.name} | 行数:${items.length} | 英語MP3:${Object.keys(mp3Files).length} | 日本語MP3:${Object.keys(jpMp3Files).length} | 文字コード:${decoded.enc}`;
   showItem();
   document.getElementById('audioStatus').textContent='選択した教材を読み込みました。フォルダから読み込んだ音声があれば、その音声を使います。';
@@ -189,6 +230,7 @@ document.getElementById('folderInput').addEventListener('change',async(e)=>{
      items.push({eng:c[0]||'',jp:c[1]||'',jp2,tag:/^(OK|NG|-)$/i.test((c[3]||'').trim())?(c[3]||'').trim().toUpperCase():''});
    }else items.push({eng:line,jp:'',jp2:prevJp2,tag:''});
  });
+ restoreTagsForCurrentFile();
  statusEl.textContent=`${textFile.name} | 行数:${items.length} | 英語MP3:${Object.keys(mp3Files).length} | 日本語MP3:${Object.keys(jpMp3Files).length} | 文字コード:${decoded.enc}`;
  document.getElementById('audioStatus').textContent='英語・日本語はそれぞれMP3があれば再生し、MP3がない場合は読み上げます（英語は「英語MP3のみ」を選ぶと例外）。音声ファイルは en / jp の別フォルダに分けてください。';
  // 教材ごとに前回のNo.を保存・復元（同じブラウザ内）
@@ -198,12 +240,20 @@ document.getElementById('folderInput').addEventListener('change',async(e)=>{
  current=Math.min(Math.max(savedNo-1,0),Math.max(items.length-1,0));
  const resumeInfo=document.getElementById('resumeInfo');
  if(resumeInfo) resumeInfo.textContent=savedNo>1 ? `前回の学習位置：No.${current+1}（自動復元）` : '学習位置は自動保存されます';
- try {const r=JSON.parse(localStorage.getItem('sentencePlayer:range:'+textFile.name)||localStorage.getItem('sentencePlayer:range:default')||'null');if(r){document.getElementById('rangeStart').value=r.start||1;document.getElementById('rangeEnd').value=Math.min(Number(r.end)||items.length,items.length);document.getElementById('rangeEnabled').checked=!!r.enabled;}} catch(e){}
- if(Number(document.getElementById('rangeEnd').value)>items.length) document.getElementById('rangeEnd').value=items.length;
- if(rangeActive()){const rg=getRange();if(current<rg.start||current>rg.end)current=rg.start;}
- document.getElementById('rangeInfo').textContent=rangeActive()?`No.${document.getElementById('rangeStart').value}～No.${document.getElementById('rangeEnd').value}を繰り返し（設定は自動保存）`:'全範囲で再生（設定は自動保存）';
+ restoreSettingsForCurrentFile();
  showItem();
 });
+function tagStorageKey(name){return 'sentencePlayer:tags:'+name;}
+function saveTagsForCurrentFile(){
+ if(!loadedTextName||!items.length)return;
+ try{localStorage.setItem(tagStorageKey(loadedTextName),JSON.stringify(items.map(item=>item.tag||'')));const info=document.getElementById('tagSaveInfo');if(info)info.textContent='判定はブラウザに自動保存済み（TSVにも残すには保存操作が必要）';}
+ catch(e){const info=document.getElementById('tagSaveInfo');if(info)info.textContent='自動保存できませんでした。TSVに保存してください。';}
+}
+function restoreTagsForCurrentFile(){
+ if(!loadedTextName||!items.length)return;
+ try{const raw=localStorage.getItem(tagStorageKey(loadedTextName));if(raw===null)return;const tags=JSON.parse(raw);if(Array.isArray(tags))items.forEach((item,i)=>{if(['OK','NG','-',''].includes(tags[i]))item.tag=tags[i];});}
+ catch(e){}
+}
 function currentTagFilter(){return document.getElementById('tagFilter')?.value||'ALL';}
 function matchesTag(i){
  const f=currentTagFilter(),tag=items[i]?.tag||'';
@@ -227,6 +277,7 @@ function updateTagControls(){
 function setCurrentTag(tag){
  if(!items.length)return;
  items[current].tag=(items[current].tag===tag)?'':tag;
+ saveTagsForCurrentFile();
  updateTagControls();
  const f=currentTagFilter();
  if(f!=='ALL'&&!matchesTag(current)){
@@ -365,7 +416,7 @@ function updateRepeat(max){document.getElementById('repeatInfo').textContent=`${
 function rangeActive(){return document.getElementById('rangeEnabled').checked && items.length>0;}
 function saveRangeSettings(start,end,enabled){
  const data=JSON.stringify({enabled:!!enabled,start:Number(start),end:Number(end)});
- try{localStorage.setItem('sentencePlayer:range:default',data);if(loadedTextName)localStorage.setItem('sentencePlayer:range:'+loadedTextName,data);}catch(e){const info=document.getElementById('rangeInfo');if(info)info.textContent='設定を保存できませんでした（ブラウザの保存設定を確認）';}
+ try{if(loadedTextName)localStorage.setItem('sentencePlayer:range:'+loadedTextName,data);}catch(e){const info=document.getElementById('rangeInfo');if(info)info.textContent='設定を保存できませんでした（ブラウザの保存設定を確認）';}
 }
 function autoSaveRangeSettings(){
  if(!items.length)return;
@@ -383,7 +434,7 @@ function applyRange(){
  let a=Number(document.getElementById('rangeStart').value),b=Number(document.getElementById('rangeEnd').value);
  if(!Number.isInteger(a)||!Number.isInteger(b)||a<1||b<a||b>items.length){alert(`開始No.と終了No.を1～${items.length}の範囲で設定してください（開始No.は終了No.以下）。`);return;}
  saveRangeSettings(a,b,rangeActive());
- document.getElementById('rangeInfo').textContent=rangeActive()?`No.${a}～No.${b}を繰り返し（設定は自動保存）`: '全範囲で再生（設定は自動保存）';
+ document.getElementById('rangeInfo').textContent=rangeActive()?`No.${a}～No.${b}を繰り返し（教材ごとに自動保存）`: '全範囲で再生（教材ごとに自動保存）';
  if(rangeActive()) {const {start,end}=getRange();if(current<start||current>end){stopAll();current=start;showItem();}}
 }
 function advanceIndex(direction){
@@ -417,7 +468,7 @@ function playPart(part,token){
  if(mode==='off'){finishPart(token);return;}
  // Japanese defaults to text-to-speech automatically when its MP3 is missing.
  if(mode!=='tts'&&src){
-   audio.src=src;audio.playbackRate=Number(document.getElementById('speedSelect').value);
+   audio.src=src;audio.playbackRate=Number(document.getElementById(isJP?'speedJpSelect':'speedEnSelect').value);
    audio.onended=()=>finishPart(token);
    audio.onerror=()=>{if(token===playToken)finishPart(token);};
    audio.play().catch(()=>finishPart(token));
@@ -429,7 +480,7 @@ function playPart(part,token){
  const languageVoice=isJP?voices.find(v=>v.lang.toLowerCase().startsWith('ja')):selectedVoice;
  if(languageVoice){utterance.voice=languageVoice;utterance.lang=languageVoice.lang;}
  else {utterance.lang=isJP?'ja-JP':(selectedVoice?.lang||'en-US');}
- utterance.rate=Number(document.getElementById('speedSelect').value);
+ utterance.rate=Number(document.getElementById(isJP?'speedJpSelect':'speedEnSelect').value);
  utterance.onend=()=>finishPart(token);
  utterance.onerror=()=>finishPart(token);
  speechSynthesis.speak(utterance);
