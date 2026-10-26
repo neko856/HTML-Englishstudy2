@@ -69,7 +69,7 @@ button,input,select{font-size:14px;padding:6px;margin:4px}
   </div>
   <div id="playControls"><button id="prevBtn">◀前</button><button id="playBtn">▶再生</button><button id="stopBtn">■停止</button><button id="nextBtn">▶次</button></div>
   <div id="sentenceDisplay">
-    <div id="eng" class="editable-text" data-field="eng" title="クリックして編集"></div><div id="jp" class="editable-text" data-field="jp" title="クリックして編集"></div><div id="jp2" class="editable-text" data-field="jp2" title="クリックして編集"></div><div class="edit-hint">英文・日本語文をクリックすると、その文だけ編集できます。</div>
+    <div id="eng" class="editable-text" data-field="eng" title="クリックして編集"></div><div id="jp" class="editable-text" data-field="jp" title="クリックして編集"></div><div id="sectionPicker" class="editable-text" role="button" tabindex="0" title="クリックしてSECTIONを選択" style="cursor:pointer;background:#f4f7fb;border:1px solid #ccd6e3;border-radius:5px;padding:8px;margin-top:8px">SECTION目次（クリックして一覧）</div><select id="sectionSelect" aria-label="SECTION目次" style="display:none;width:100%;padding:8px;margin-top:4px"></select><div class="edit-hint">英文・日本語文をクリックすると編集できます。SECTION表示をクリックすると全SECTIONの一覧が開き、選ぶとそのSECTIONの先頭行から再生します。</div>
   </div>
   <div id="tagControls" style="margin:10px 0;padding:8px;border:1px solid #ddd;border-radius:6px;font-size:14px">
     <strong>この文の判定：</strong>
@@ -116,7 +116,8 @@ const statusEl=document.getElementById('status');
 const posEl=document.getElementById('position');
 const engEl=document.getElementById('eng');
 const jpEl=document.getElementById('jp');
-const jp2El=document.getElementById('jp2');
+const jp2El=document.getElementById('sectionPicker');
+const sectionSelectEl=document.getElementById('sectionSelect');
 function loadVoices(){voices=speechSynthesis.getVoices();const s=document.getElementById('voiceSelect');const old=s.value;s.innerHTML='';voices.forEach((v,i)=>{const o=document.createElement('option');o.value=i;o.textContent=`${v.name} (${v.lang})`;s.appendChild(o)});const e=voices.findIndex(v=>v.lang.startsWith('en'));if(e>=0)s.value=e;}
 function savePlayerSettings(){
   const ids=['repeatSelect','speedEnSelect','speedJpSelect','playMode','jpMode','sequenceMode','tagFilter','showJapanese'];
@@ -184,11 +185,10 @@ document.getElementById('textFileInput').addEventListener('change',async(e)=>{
   const decoded=await decodeTextFile(f);
   loadedTextName=f.name; sourceTextName=f.name.replace(/\.(txt|tsv)$/i,'')+'_edited.tsv'; overwriteHandle=null; items=[];
   document.getElementById('saveHelp').textContent='読み込んだ教材：'+loadedTextName+'。上書き保存する場合は「上書きする元ファイルを選択」で同じファイルを指定してください。';
-  let prevJp2='';
   decoded.text.split(/\r?\n/).forEach(line=>{
    if(!line.trim())return;
-   if(line.includes('\t')){const c=line.split('\t');let jp2=(c[2]||'').trim();if(!jp2)jp2=prevJp2;else prevJp2=jp2;items.push({eng:c[0]||'',jp:c[1]||'',jp2,tag:/^(OK|NG|-)$/i.test((c[3]||'').trim())?(c[3]||'').trim().toUpperCase():''});}
-   else items.push({eng:line,jp:'',jp2:prevJp2,tag:''});
+   if(line.includes('\t')){const c=line.split('\t');const jp2=(c[2]||'').trim();items.push({eng:c[0]||'',jp:c[1]||'',jp2,tag:/^(OK|NG|-)$/i.test((c[3]||'').trim())?(c[3]||'').trim().toUpperCase():''});}
+   else items.push({eng:line,jp:'',jp2:'',tag:''});
   });
   restoreTagsForCurrentFile();
   let savedNo=1;try{savedNo=Number(localStorage.getItem('sentencePlayer:lastNo:'+f.name))||1;}catch(err){}
@@ -221,14 +221,12 @@ document.getElementById('folderInput').addEventListener('change',async(e)=>{
    else mp3Files[key]=f;
  }
  const decoded=await decodeTextFile(textFile);loadedTextName=textFile.name;sourceTextName=textFile.name.replace(/\.(tsv|txt)$/i,'')+'_edited.tsv';overwriteHandle=null;document.getElementById('saveHelp').textContent='読み込んだ教材：'+loadedTextName+'。上書き保存する場合は「上書きする元ファイルを選択」で同じファイルを指定してください。';items=[];
- let prevJp2='';
  decoded.text.split(/\r?\n/).forEach(line=>{
    if(!line.trim()) return;
    if(line.includes('\t')){
-     const c=line.split('\t');let jp2=(c[2]||'').trim();
-     if(!jp2) jp2=prevJp2; else prevJp2=jp2;
+     const c=line.split('\t');const jp2=(c[2]||'').trim();
      items.push({eng:c[0]||'',jp:c[1]||'',jp2,tag:/^(OK|NG|-)$/i.test((c[3]||'').trim())?(c[3]||'').trim().toUpperCase():''});
-   }else items.push({eng:line,jp:'',jp2:prevJp2,tag:''});
+   }else items.push({eng:line,jp:'',jp2:'',tag:''});
  });
  restoreTagsForCurrentFile();
  statusEl.textContent=`${textFile.name} | 行数:${items.length} | 英語MP3:${Object.keys(mp3Files).length} | 日本語MP3:${Object.keys(jpMp3Files).length} | 文字コード:${decoded.enc}`;
@@ -295,6 +293,25 @@ document.getElementById('tagFilter').addEventListener('change',()=>{
  if(indexes.length&&!matchesTag(current))current=indexes[0];
  stopAll();showItem();
 });
+function listSections(){
+ const out=[];items.forEach((item,i)=>{const title=(item.jp2||'').trim();if(title)out.push({index:i,title});});return out;
+}
+function updateSectionPicker(){
+ const sections=listSections();
+ const active=sections.slice().reverse().find(s=>s.index<=current);
+ jp2El.textContent=active?`SECTION：${active.title}  ▾`:(sections.length?'C列：SECTION目次（クリック）  ▾':'C列：SECTIONなし');
+ sectionSelectEl.innerHTML='';
+ const placeholder=document.createElement('option');placeholder.value='';placeholder.textContent='SECTIONを選択';sectionSelectEl.appendChild(placeholder);
+ sections.forEach(s=>{const o=document.createElement('option');o.value=String(s.index);o.textContent=`${s.title}（No.${s.index+1}から）`;sectionSelectEl.appendChild(o);});
+}
+function toggleSectionSelect(){
+ if(!items.length)return;
+ updateSectionPicker();
+ const opening=sectionSelectEl.style.display==='none';
+ sectionSelectEl.style.display=opening?'block':'none';
+ if(opening){const sections=listSections();const active=sections.slice().reverse().find(s=>s.index<=current);sectionSelectEl.value=active?String(active.index):'';sectionSelectEl.focus();}
+}
+
 function showItem(){
  if(!items.length)return;
  // 文を切り替えたときは編集画面を閉じ、通常表示に戻す
@@ -310,8 +327,9 @@ function showItem(){
    if(resumeInfo) resumeInfo.textContent='このブラウザでは自動保存できません';
  }
  engEl.textContent=items[current].eng;
- if(document.getElementById('showJapanese').checked){jpEl.textContent=items[current].jp;jp2El.textContent=items[current].jp2||'';}
- else{jpEl.textContent='';jp2El.textContent='';}
+ if(document.getElementById('showJapanese').checked){jpEl.textContent=items[current].jp;}
+ else{jpEl.textContent='';}
+ updateSectionPicker();
 }
 function closeInlineEditor(save){
  if(!editingField)return;
@@ -326,8 +344,9 @@ function closeInlineEditor(save){
 function showItemDisplayOnly(){
  if(!items.length)return;
  engEl.textContent=items[current].eng;
- if(document.getElementById('showJapanese').checked){jpEl.textContent=items[current].jp;jp2El.textContent=items[current].jp2||'';}
- else{jpEl.textContent='';jp2El.textContent='';}
+ if(document.getElementById('showJapanese').checked){jpEl.textContent=items[current].jp;}
+ else{jpEl.textContent='';}
+ updateSectionPicker();
 }
 function startInlineEdit(element){
  if(!items.length || editingField)return;
@@ -348,7 +367,10 @@ function startInlineEdit(element){
  cancel.onclick=()=>closeInlineEditor(false);
  textarea.focus();textarea.setSelectionRange(textarea.value.length,textarea.value.length);
 }
-[engEl,jpEl,jp2El].forEach(el=>el.addEventListener('click',()=>startInlineEdit(el)));
+[engEl,jpEl].forEach(el=>el.addEventListener('click',()=>startInlineEdit(el)));
+jp2El.addEventListener('click',toggleSectionSelect);
+jp2El.addEventListener('keydown',e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();toggleSectionSelect();}});
+sectionSelectEl.addEventListener('change',()=>{if(sectionSelectEl.value==='')return;const n=Number(sectionSelectEl.value);if(Number.isInteger(n)&&n>=0&&n<items.length){stopAll();current=n;showItem();sectionSelectEl.style.display='none';playCurrent();}});
 document.getElementById('showJapanese').addEventListener('change',showItem);
 document.getElementById('saveEditedBtn').addEventListener('click',()=>{
  if(editingField) closeInlineEditor(true);
