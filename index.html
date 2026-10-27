@@ -18,6 +18,7 @@ body{font-family:sans-serif;margin:12px;max-width:1200px}
 #rangeControls input[type=number]{width:55px;padding:3px}
 #rangeInfo{font-size:11px!important}
 #eng{font-size:20px;font-weight:bold;margin-top:16px}
+#eng,#jp{white-space:pre-wrap;overflow-wrap:anywhere}
 #jp{font-size:16px;color:#0066cc;margin-top:12px}
 #jp2{font-size:16px;color:#cc6600;margin-top:8px}
 button,input,select{font-size:14px;padding:6px;margin:4px}
@@ -54,9 +55,9 @@ button,input,select{font-size:14px;padding:6px;margin:4px}
 <header id="topHeader" style="margin:0 0 14px;padding:8px 0;border-bottom:1px solid #ddd">
   <h2>Sentence Player</h2>
   <div style="margin:8px 0">
-<label for="folderInput" style="display:inline-block;padding:8px 12px;border:1px solid #888;border-radius:4px;cursor:pointer">フォルダを読み込む</label>
+<label for="folderInput" style="display:inline-block;padding:8px 12px;border:1px solid #888;border-radius:4px;cursor:pointer">フォルダから教材・音声を読み込む</label>
 <input style="display:none" type="file" id="folderInput" webkitdirectory multiple>
-<label for="textFileInput" style="display:inline-block;padding:8px 12px;border:1px solid #888;border-radius:4px;cursor:pointer;margin-left:4px">TXT/TSVを選ぶ</label>
+<label for="textFileInput" style="display:inline-block;padding:8px 12px;border:1px solid #888;border-radius:4px;cursor:pointer;margin-left:4px">TXT/TSVをファイル名で選ぶ</label>
 <input style="display:none" type="file" id="textFileInput" accept=".txt,.tsv,text/plain,text/tab-separated-values">
 <div style="font-size:12px;color:#555;margin-top:5px">教材をファイル名で選べます。音声も使う場合は、先にフォルダから読み込んでください。</div>
 </div>
@@ -162,6 +163,14 @@ function restoreSettingsForCurrentFile(){
   updateTagControls();
 }
 
+// TSV内のセル内改行を \n として保存し、読み込み時に改行へ戻す。
+function encodeCell(value){
+  return String(value ?? '').replace(/\\/g,'\\\\').replace(/\r\n|\r|\n/g,'\\n');
+}
+function decodeCell(value){
+  return String(value ?? '').replace(/\\\\/g,'\u0000').replace(/\\n/g,'\n').replace(/\u0000/g,'\\');
+}
+
 async function decodeTextFile(file){
   const b=await file.arrayBuffer();
   // UTF-8は「空白があるか」ではなく、バイト列が正しいUTF-8かで判定する。
@@ -187,7 +196,7 @@ document.getElementById('textFileInput').addEventListener('change',async(e)=>{
   document.getElementById('saveHelp').textContent='読み込んだ教材：'+loadedTextName+'。上書き保存する場合は「上書きする元ファイルを選択」で同じファイルを指定してください。';
   decoded.text.split(/\r?\n/).forEach(line=>{
    if(!line.trim())return;
-   if(line.includes('\t')){const c=line.split('\t');const jp2=(c[2]||'').trim();items.push({eng:c[0]||'',jp:c[1]||'',jp2,tag:/^(OK|NG|-)$/i.test((c[3]||'').trim())?(c[3]||'').trim().toUpperCase():''});}
+   if(line.includes('\t')){const c=line.split('\t');const jp2=decodeCell(c[2]||'').trim();items.push({eng:decodeCell(c[0]||''),jp:decodeCell(c[1]||''),jp2,tag:/^(OK|NG|-)$/i.test((c[3]||'').trim())?(c[3]||'').trim().toUpperCase():''});}
    else items.push({eng:line,jp:'',jp2:'',tag:''});
   });
   restoreTagsForCurrentFile();
@@ -224,8 +233,8 @@ document.getElementById('folderInput').addEventListener('change',async(e)=>{
  decoded.text.split(/\r?\n/).forEach(line=>{
    if(!line.trim()) return;
    if(line.includes('\t')){
-     const c=line.split('\t');const jp2=(c[2]||'').trim();
-     items.push({eng:c[0]||'',jp:c[1]||'',jp2,tag:/^(OK|NG|-)$/i.test((c[3]||'').trim())?(c[3]||'').trim().toUpperCase():''});
+     const c=line.split('\t');const jp2=decodeCell(c[2]||'').trim();
+     items.push({eng:decodeCell(c[0]||''),jp:decodeCell(c[1]||''),jp2,tag:/^(OK|NG|-)$/i.test((c[3]||'').trim())?(c[3]||'').trim().toUpperCase():''});
    }else items.push({eng:line,jp:'',jp2:'',tag:''});
  });
  restoreTagsForCurrentFile();
@@ -375,7 +384,7 @@ document.getElementById('showJapanese').addEventListener('change',showItem);
 document.getElementById('saveEditedBtn').addEventListener('click',()=>{
  if(editingField) closeInlineEditor(true);
  if(!items.length){alert('先にTSV/TXT教材を読み込んでください。');return;}
- const content=items.map(item=>[item.eng||'',item.jp||'',item.jp2||'',item.tag||''].join('\t')).join('\r\n')+'\r\n';
+ const content=items.map(item=>[encodeCell(item.eng),encodeCell(item.jp),encodeCell(item.jp2),encodeCell(item.tag)].join('\t')).join('\r\n')+'\r\n';
  const blob=new Blob(['\ufeff',content],{type:'text/tab-separated-values;charset=utf-8'});
  const url=URL.createObjectURL(blob);const a=document.createElement('a');a.href=url;a.download=sourceTextName;a.style.display='none';document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),1000);
  statusEl.textContent=statusEl.textContent.replace(/ \| 編集内容あり（元ファイルは未変更）/g,'')+' | 編集内容をTSV保存';
@@ -418,7 +427,7 @@ document.getElementById('overwriteBtn').addEventListener('click',async()=>{
  if(!overwriteHandle){alert('先に「上書きする元ファイルを選択」を押し、読み込んだ教材と同じファイルを選んでください。');return;}
  if(!confirm('「'+overwriteHandle.name+'」を編集内容で上書きします。\n元の内容は失われます。続けますか？'))return;
  try{if((await overwriteHandle.queryPermission({mode:'readwrite'}))!=='granted'){const permission=await overwriteHandle.requestPermission({mode:'readwrite'});if(permission!=='granted'){alert('書き込み許可が得られませんでした。');return;}}
- const content=items.map(item=>[item.eng||'',item.jp||'',item.jp2||'',item.tag||''].join('\t')).join('\r\n')+'\r\n';const writable=await overwriteHandle.createWritable();await writable.write(new Blob(['\ufeff',content],{type:'text/tab-separated-values;charset=utf-8'}));await writable.close();statusEl.textContent=statusEl.textContent.replace(/ \| 編集内容あり（元ファイルは未変更）/g,'')+' | '+overwriteHandle.name+' に上書き保存しました';alert('上書き保存しました。');
+ const content=items.map(item=>[encodeCell(item.eng),encodeCell(item.jp),encodeCell(item.jp2),encodeCell(item.tag)].join('\t')).join('\r\n')+'\r\n';const writable=await overwriteHandle.createWritable();await writable.write(new Blob(['\ufeff',content],{type:'text/tab-separated-values;charset=utf-8'}));await writable.close();statusEl.textContent=statusEl.textContent.replace(/ \| 編集内容あり（元ファイルは未変更）/g,'')+' | '+overwriteHandle.name+' に上書き保存しました';alert('上書き保存しました。');
  }catch(err){alert('上書き保存に失敗しました：'+err.message+'\n「別ファイルとして保存」も利用できます。');}
 });
 function numberedKey(i){
