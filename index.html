@@ -98,7 +98,7 @@ button,input,select{font-size:14px;padding:6px;margin:4px}
   </div>
 </div>
 
-<h3>Sentence Player 20261028</h3>
+<h3>Sentence Player v4.1 (3列対応)</h3>
 
 <div id="resumeInfo" style="font-size:0.9em;color:#42624a;margin:6px 0;">学習位置は自動保存されます</div><div id="status">教材未読込</div>
 <button id="saveEditedBtn" type="button">別ファイルとして保存</button> <button id="chooseOverwriteBtn" type="button">上書きする元ファイルを選択</button> <button id="overwriteBtn" type="button">上書き保存</button>
@@ -286,13 +286,13 @@ function setCurrentTag(tag){
  items[current].tag=(items[current].tag===tag)?'':tag;
  saveTagsForCurrentFile();
  updateTagControls();
- const f=currentTagFilter();
- if(f!=='ALL'&&!matchesTag(current)){
-   const indexes=matchingIndexes();
-   if(indexes.length){current=indexes[0];showItem();}
-   else {showItem();}
- }else showItem();
+ // 判定チェックだけでは現在の文番号を移動させない。
+ // フィルター条件に合わなくなっても、次の再生操作までは現在位置を保持する。
+ showItem();
 }
+// 判定欄のタップがほかのクリック操作として扱われないようにする。
+const tagControlsEl=document.getElementById('tagControls');
+['click','pointerdown','pointerup','touchstart','touchend'].forEach(type=>tagControlsEl.addEventListener(type,e=>e.stopPropagation(),{passive:true}));
 document.getElementById('tagOK').addEventListener('change',()=>setCurrentTag('OK'));
 document.getElementById('tagNG').addEventListener('change',()=>setCurrentTag('NG'));
 document.getElementById('tagDash').addEventListener('change',()=>setCurrentTag('-'));
