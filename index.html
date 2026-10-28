@@ -49,6 +49,23 @@ button,input,select{font-size:14px;padding:6px;margin:4px}
 .edit-actions button{font-size:14px;padding:6px 12px}
 #saveEditedBtn,#overwriteBtn,#chooseOverwriteBtn{font-size:15px;padding:8px 12px;margin:8px 4px 8px 0}
 #saveHelp{font-size:12px;color:#555;margin:4px 0 10px}
+
+/* 誤操作防止ロック：ロック中も再生ボタンと解除ボタンだけ操作可能 */
+body.player-locked .editable-text,
+body.player-locked label,
+body.player-locked #repeatRow,
+body.player-locked #status,
+body.player-locked #audioStatus,
+body.player-locked #resumeInfo,
+body.player-locked #saveHelp { pointer-events:none !important; }
+body.player-locked #playControls button:not(#playBtn),
+body.player-locked #topControls button,
+body.player-locked #rangeControls button,
+body.player-locked #lockControls button:not(#unlockBtn) { pointer-events:none; }
+body.player-locked #playBtn { position:relative; z-index:1001; outline:3px solid #2e7d32; }
+body.player-locked #lockControls { position:sticky; top:0; z-index:1002; background:#fff; padding:8px; border:2px solid #2e7d32; border-radius:8px; }
+body.player-locked #unlockBtn { display:inline-block !important; min-height:44px; min-width:140px; background:#fff3cd; border:2px solid #9a6700; font-weight:bold; touch-action:none; }
+body.player-locked #lockInfo { display:block; margin:6px 0; color:#8a4b00 !important; font-weight:bold; }
 </style>
 </head>
 <body>
@@ -69,6 +86,7 @@ button,input,select{font-size:14px;padding:6px;margin:4px}
     <div id="position" style="font-size:18px;font-weight:bold">No.0 / 0</div>
   </div>
   <div id="playControls"><button id="prevBtn">◀前</button><button id="playBtn">▶再生</button><button id="stopBtn">■停止</button><button id="nextBtn">▶次</button></div>
+  <div id="lockControls" style="margin:6px 0"><button id="lockBtn" type="button">🔒 操作ロック</button><span id="lockInfo" style="font-size:12px;color:#555;margin-left:6px">ロックすると再生以外の操作を禁止します</span><button id="unlockBtn" type="button" style="display:none;touch-action:none;user-select:none;-webkit-user-select:none">長押しで解除</button></div>
   <div id="sentenceDisplay">
     <div id="eng" class="editable-text" data-field="eng" title="クリックして編集"></div><div id="jp" class="editable-text" data-field="jp" title="クリックして編集"></div><div id="sectionPicker" class="editable-text" role="button" tabindex="0" title="クリックしてSECTIONを選択" style="cursor:pointer;background:#f4f7fb;border:1px solid #ccd6e3;border-radius:5px;padding:8px;margin-top:8px">SECTION目次（クリックして一覧）</div><select id="sectionSelect" aria-label="SECTION目次" style="display:none;width:100%;padding:8px;margin-top:4px"></select><div class="edit-hint">英文・日本語文をクリックすると編集できます。SECTION表示をクリックすると全SECTIONの一覧が開き、選ぶとそのSECTIONの先頭行から再生します。</div>
   </div>
@@ -548,4 +566,59 @@ document.getElementById('rangeEnabled').addEventListener('change',applyRange);
 document.getElementById('rangeStart').addEventListener('change',autoSaveRangeSettings);
 document.getElementById('rangeEnd').addEventListener('change',autoSaveRangeSettings);
 
+
+// 誤操作防止ロック：ロック中は再生ボタン以外の入力を無効化。解除はボタン長押し。
+(function setupOperationLock(){
+ const lockBtn=document.getElementById('lockBtn');
+ const unlockBtn=document.getElementById('unlockBtn');
+ const lockInfo=document.getElementById('lockInfo');
+ const playBtn=document.getElementById('playBtn');
+ let locked=false,holdTimer=null,holdTriggered=false;
+ const HOLD_MS=1200;
+ let disabledBeforeLock=[];
+ function interactiveElements(){return Array.from(document.querySelectorAll('button,input,select,textarea'));}
+ function setLocked(next){
+   locked=next;
+   document.body.classList.toggle('player-locked',locked);
+   if(locked){
+     disabledBeforeLock=[];
+     interactiveElements().forEach(el=>{
+       if(el===playBtn||el===unlockBtn||el===lockBtn)return;
+       disabledBeforeLock.push([el,el.disabled]);
+       el.disabled=true;
+     });
+     lockBtn.style.display='none';
+     unlockBtn.style.display='inline-block';
+     lockInfo.textContent='🔒 ロック中：再生以外の操作は禁止。解除は「長押しで解除」を1.2秒押し続けてください。';
+     unlockBtn.textContent='長押しで解除';
+   }else{
+     disabledBeforeLock.forEach(([el,wasDisabled])=>{if(el.isConnected)el.disabled=wasDisabled;});
+     disabledBeforeLock=[];
+     lockBtn.style.display='inline-block';
+     unlockBtn.style.display='none';
+     lockInfo.textContent='ロックすると再生以外の操作を禁止します';
+     document.body.classList.remove('player-locked');
+   }
+ }
+ lockBtn.addEventListener('click',()=>setLocked(true));
+ function startHold(e){
+   if(!locked)return;
+   e.preventDefault();
+   holdTriggered=false;
+   unlockBtn.textContent='押し続けてください…';
+   holdTimer=setTimeout(()=>{holdTriggered=true;setLocked(false);},HOLD_MS);
+ }
+ function cancelHold(){
+   if(holdTimer!==null){clearTimeout(holdTimer);holdTimer=null;}
+   if(locked&&!holdTriggered)unlockBtn.textContent='長押しで解除';
+ }
+ unlockBtn.addEventListener('pointerdown',startHold);
+ ['pointerup','pointercancel','pointerleave','lostpointercapture'].forEach(type=>unlockBtn.addEventListener(type,cancelHold));
+ unlockBtn.addEventListener('contextmenu',e=>e.preventDefault());
+ // ロック中、Enter/Spaceなどのキーボード操作でも他のコントロールを動かさない。
+ document.addEventListener('click',e=>{if(!locked)return;if(e.target.closest('#playBtn, #unlockBtn'))return;e.preventDefault();e.stopImmediatePropagation();},true);
+ document.addEventListener('change',e=>{if(locked){e.preventDefault();e.stopImmediatePropagation();}},true);
+ document.addEventListener('keydown',e=>{if(!locked)return;if(e.target.closest('#playBtn, #unlockBtn'))return;e.preventDefault();e.stopImmediatePropagation();},true);
+ // 初期状態はロック解除。ページ更新後に意図せず操作不能にならないようにする。
+})();
 </script></body></html>
