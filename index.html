@@ -66,6 +66,16 @@ body.player-locked #playBtn { position:relative; z-index:1001; outline:3px solid
 body.player-locked #lockControls { position:sticky; top:0; z-index:1002; background:#fff; padding:8px; border:2px solid #2e7d32; border-radius:8px; }
 body.player-locked #unlockBtn { display:inline-block !important; min-height:44px; min-width:140px; background:#fff3cd; border:2px solid #9a6700; font-weight:bold; touch-action:none; }
 body.player-locked #lockInfo { display:block; margin:6px 0; color:#8a4b00 !important; font-weight:bold; }
+
+/* 英文ごとの文法解説パネル */
+#explanationControls{margin:10px 0;padding:8px;border:1px solid #cbd5e1;border-radius:7px;background:#f8fafc}
+#explanationControls button,#explanationControls label{font-size:14px;padding:6px 9px;margin:3px}
+#explanationPanel{margin-top:8px;padding:12px;border:1px solid #d6dce5;border-radius:7px;background:#fff;line-height:1.65;white-space:pre-wrap;overflow-wrap:anywhere}
+#explanationPanel .explanation-heading{font-weight:bold;margin-bottom:6px}
+#explanationStatus{font-size:12px;color:#555;margin:4px 0}
+body.player-locked #explanationControls button,
+body.player-locked #explanationControls label{pointer-events:none}
+
 </style>
 </head>
 <body>
@@ -89,6 +99,16 @@ body.player-locked #lockInfo { display:block; margin:6px 0; color:#8a4b00 !impor
   <div id="lockControls" style="margin:6px 0"><button id="lockBtn" type="button">🔒 操作ロック</button><span id="lockInfo" style="font-size:12px;color:#555;margin-left:6px">ロックすると再生以外の操作を禁止します</span><button id="unlockBtn" type="button" style="display:none;touch-action:none;user-select:none;-webkit-user-select:none">長押しで解除</button></div>
   <div id="sentenceDisplay">
     <div id="eng" class="editable-text" data-field="eng" title="クリックして編集"></div><div id="jp" class="editable-text" data-field="jp" title="クリックして編集"></div><div id="sectionPicker" class="editable-text" role="button" tabindex="0" title="クリックしてSECTIONを選択" style="cursor:pointer;background:#f4f7fb;border:1px solid #ccd6e3;border-radius:5px;padding:8px;margin-top:8px">SECTION目次（クリックして一覧）</div><select id="sectionSelect" aria-label="SECTION目次" style="display:none;width:100%;padding:8px;margin-top:4px"></select><div class="edit-hint">英文・日本語文をクリックすると編集できます。SECTION表示をクリックすると全SECTIONの一覧が開き、選ぶとそのSECTIONの先頭行から再生します。</div>
+  </div>
+  <div id="explanationControls">
+    <strong>英文の文法解説</strong>
+    <div style="margin-top:6px">
+      <label for="explanationFileInput" style="display:inline-block;border:1px solid #888;border-radius:4px;cursor:pointer">解説TXT/TSVを読み込む</label>
+      <input id="explanationFileInput" type="file" accept=".txt,.tsv,text/plain,text/tab-separated-values" style="display:none">
+      <button id="toggleExplanationBtn" type="button">解説を表示</button>
+    </div>
+    <div id="explanationStatus">解説ファイル未読込。No・英文・解説の3列TSV/TXTを読み込めます。</div>
+    <div id="explanationPanel" hidden>解説ファイルを読み込むと、現在の英文に対応する解説がここに表示されます。</div>
   </div>
   <div id="tagControls" style="margin:10px 0;padding:8px;border:1px solid #ddd;border-radius:6px;font-size:14px">
     <strong>この文の判定：</strong>
@@ -130,6 +150,85 @@ body.player-locked #lockInfo { display:block; margin:6px 0; color:#8a4b00 !impor
 <audio id="audio"></audio>
 <script>
 let items=[],mp3Files={},jpMp3Files={},current=0,repeatCount=0,voices=[],sequenceParts=[],sequenceIndex=0,playToken=0,editingField=null,sourceTextName='SentencePlayer_edited.tsv',loadedTextName='',overwriteHandle=null;
+
+let explanationRows = new Map();
+let explanationLoadedName = '';
+let explanationVisible = false;
+
+// 解説ファイル形式：No<TAB>英文<TAB>解説。英文列は照合用。
+// セル内改行は教材TSVと同じく \n として記録できます。
+function parseExplanationFile(text){
+  const rows = new Map();
+  text.replace(/^\uFEFF/, '').split(/\r?\n/).forEach((line, lineIndex) => {
+    if(!line.trim()) return;
+    const cols = line.split('\t');
+    if(lineIndex === 0 && /^(no|番号)$/i.test((cols[0]||'').trim())) return;
+    if(cols.length < 3) return;
+    const no = Number((cols[0]||'').trim());
+    if(!Number.isInteger(no) || no < 1) return;
+    rows.set(no, { english: decodeCell(cols[1]||''), explanation: decodeCell(cols.slice(2).join('\t')) });
+  });
+  return rows;
+}
+function updateExplanation(){
+  const panel = document.getElementById('explanationPanel');
+  const status = document.getElementById('explanationStatus');
+  const btn = document.getElementById('toggleExplanationBtn');
+  if(!panel || !status || !btn) return;
+  panel.hidden = !explanationVisible;
+  btn.textContent = explanationVisible ? '解説を隠す' : '解説を表示';
+  if(!explanationLoadedName){
+    status.textContent = '解説ファイル未読込。No・英文・解説の3列TSV/TXTを読み込めます。';
+    panel.textContent = '解説ファイルを読み込むと、現在の英文に対応する解説がここに表示されます。';
+    return;
+  }
+  status.textContent = '解説ファイル：' + explanationLoadedName;
+  if(!items.length || !items[current]){
+    panel.textContent = '先に英文教材を読み込んでください。';
+    return;
+  }
+  const row = explanationRows.get(current + 1);
+  if(!row){
+    panel.textContent = `No.${current+1} の解説はまだありません。`;
+    return;
+  }
+  const expected = row.english.trim();
+  const actual = (items[current].eng||'').trim();
+  // 末尾の句読点（例：ピリオド）や空白の違いでは表示を止めない。
+  const normalizeEnglish = value => value
+    .normalize('NFKC')
+    .replace(/[\s\u00A0]+/g, ' ')
+    .trim()
+    .replace(/[.!?。．！？…]+$/g, '')
+    .trim()
+    .toLowerCase();
+  if(expected && normalizeEnglish(expected) !== normalizeEnglish(actual)){
+    // 英文が少し異なっていても、番号が一致していれば解説は表示する。
+    // 一致しない旨はステータスに軽く知らせるだけで、解説表示は保留しない。
+    status.textContent = '解説ファイル：' + explanationLoadedName + '（英文表記に差がありますが、No.で対応する解説を表示中）';
+  }
+  panel.textContent = row.explanation || 'この文の解説は空欄です。';
+}
+document.getElementById('explanationFileInput').addEventListener('change', async (e)=>{
+  const file = e.target.files && e.target.files[0];
+  if(!file) return;
+  try{
+    const decoded = await decodeTextFile(file);
+    explanationRows = parseExplanationFile(decoded.text);
+    explanationLoadedName = file.name;
+    explanationVisible = true;
+    updateExplanation();
+    document.getElementById('status').textContent += ` | 解説読込:${file.name}（${explanationRows.size}件）`;
+  }catch(err){
+    alert('解説ファイルを読み込めませんでした：' + (err.message||err));
+  }
+  e.target.value = '';
+});
+document.getElementById('toggleExplanationBtn').addEventListener('click', ()=>{
+  explanationVisible = !explanationVisible;
+  updateExplanation();
+});
+
 const audio=document.getElementById('audio');
 const statusEl=document.getElementById('status');
 const posEl=document.getElementById('position');
@@ -357,6 +456,7 @@ function showItem(){
  if(document.getElementById('showJapanese').checked){jpEl.textContent=items[current].jp;}
  else{jpEl.textContent='';}
  updateSectionPicker();
+ updateExplanation();
 }
 function closeInlineEditor(save){
  if(!editingField)return;
@@ -374,6 +474,7 @@ function showItemDisplayOnly(){
  if(document.getElementById('showJapanese').checked){jpEl.textContent=items[current].jp;}
  else{jpEl.textContent='';}
  updateSectionPicker();
+ updateExplanation();
 }
 function startInlineEdit(element){
  if(!items.length || editingField)return;
