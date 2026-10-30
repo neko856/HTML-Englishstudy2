@@ -71,10 +71,14 @@ body.player-locked #lockInfo { display:block; margin:6px 0; color:#8a4b00 !impor
 #explanationControls{margin:10px 0;padding:8px;border:1px solid #cbd5e1;border-radius:7px;background:#f8fafc}
 #explanationControls button,#explanationControls label{font-size:14px;padding:6px 9px;margin:3px}
 #explanationPanel{margin-top:8px;padding:12px;border:1px solid #d6dce5;border-radius:7px;background:#fff;line-height:1.65;white-space:pre-wrap;overflow-wrap:anywhere}
-#explanationPanel .explanation-heading{font-weight:bold;margin-bottom:6px}
+#explanationPanel .explanation-heading{font-weight:700;margin:7px 0 3px;color:#26384d}
+#explanationPanel .explanation-line{margin:1px 0}
+#explanationPanel .explanation-bullet{margin:1px 0 1px 8px}
+#explanationPanel .explanation-gap{height:4px}
+#explanationPanel strong{font-weight:700;color:#111}
 #explanationStatus{font-size:12px;color:#555;margin:4px 0}
 body.player-locked #explanationControls button,
-body.player-locked #explanationControls label{pointer-events:none}
+body.player-locked #explanationControls label,\nbody.player-locked #explanationManager textarea{pointer-events:none}
 
 </style>
 </head>
@@ -109,6 +113,25 @@ body.player-locked #explanationControls label{pointer-events:none}
     </div>
     <div id="explanationStatus">解説ファイル未読込。No・英文・解説の3列TSV/TXTを読み込めます。</div>
     <div id="explanationPanel" hidden>解説ファイルを読み込むと、現在の英文に対応する解説がここに表示されます。</div>
+ 
+    <div id="explanationManager" style="margin-top:10px;padding-top:8px;border-top:1px solid #ddd">
+      <div style="display:flex;flex-wrap:wrap;gap:5px">
+        <button id="makeAiPromptBtn" type="button">AIに解説を依頼（依頼文コピー）</button>
+        <button id="editExplanationBtn" type="button">このNo.を編集</button>
+        <button id="deleteExplanationBtn" type="button">このNo.を削除</button>
+        <button id="deleteAllExplanationsBtn" type="button">全件削除</button>
+        <button id="saveExplanationFileBtn" type="button">解説ファイルを別名保存</button>
+        <button id="chooseExplanationOverwriteBtn" type="button">上書きする解説ファイルを選択</button>
+        <button id="overwriteExplanationFileBtn" type="button">解説ファイルを上書き保存</button>
+      </div>
+      <div style="font-size:12px;color:#555;margin:5px 0">AIの回答、または自分で書いた解説を下に貼り付けて「このNo.に追加・更新」してください。</div>
+      <textarea id="explanationEditor" rows="9" style="width:100%;box-sizing:border-box;padding:8px;font:inherit;line-height:1.5" placeholder="AIの回答をここに貼り付けます。解説本文だけでも、No・英文・解説のTSV形式でも登録できます。"></textarea>
+      <div style="display:flex;flex-wrap:wrap;gap:5px">
+        <button id="applyExplanationBtn" type="button">このNo.に追加・更新</button>
+        <button id="clearExplanationEditorBtn" type="button">入力欄をクリア</button>
+      </div>
+      <div id="explanationManagerStatus" style="font-size:12px;color:#555;margin-top:5px">解説を追加・編集・削除した後は「別名保存」または「上書き保存」でファイルに保存してください。</div>
+    </div>
   </div>
   <div id="tagControls" style="margin:10px 0;padding:8px;border:1px solid #ddd;border-radius:6px;font-size:14px">
     <strong>この文の判定：</strong>
@@ -154,6 +177,8 @@ let items=[],mp3Files={},jpMp3Files={},current=0,repeatCount=0,voices=[],sequenc
 let explanationRows = new Map();
 let explanationLoadedName = '';
 let explanationVisible = false;
+let explanationOverwriteHandle = null;
+let explanationFileExtension = '.tsv';
 
 // 解説ファイル形式：No<TAB>英文<TAB>解説。英文列は照合用。
 // セル内改行は教材TSVと同じく \n として記録できます。
@@ -166,7 +191,7 @@ function parseExplanationFile(text){
     if(cols.length < 3) return;
     const no = Number((cols[0]||'').trim());
     if(!Number.isInteger(no) || no < 1) return;
-    rows.set(no, { english: decodeCell(cols[1]||''), explanation: decodeCell(cols.slice(2).join('\t')) });
+    rows.set(no, { english: decodeCell(cols[1]||''), explanation: cleanExplanationFormatting(decodeCell(cols.slice(2).join('\t'))) });
   });
   return rows;
 }
@@ -207,7 +232,7 @@ function updateExplanation(){
     // 一致しない旨はステータスに軽く知らせるだけで、解説表示は保留しない。
     status.textContent = '解説ファイル：' + explanationLoadedName + '（英文表記に差がありますが、No.で対応する解説を表示中）';
   }
-  panel.textContent = row.explanation || 'この文の解説は空欄です。';
+  panel.innerHTML = row.explanation ? renderExplanationMarkdown(row.explanation) : 'この文の解説は空欄です。';
 }
 document.getElementById('explanationFileInput').addEventListener('change', async (e)=>{
   const file = e.target.files && e.target.files[0];
@@ -216,6 +241,8 @@ document.getElementById('explanationFileInput').addEventListener('change', async
     const decoded = await decodeTextFile(file);
     explanationRows = parseExplanationFile(decoded.text);
     explanationLoadedName = file.name;
+    explanationFileExtension = /\.txt$/i.test(file.name) ? '.txt' : '.tsv';
+    explanationOverwriteHandle = null;
     explanationVisible = true;
     updateExplanation();
     document.getElementById('status').textContent += ` | 解説読込:${file.name}（${explanationRows.size}件）`;
@@ -227,6 +254,136 @@ document.getElementById('explanationFileInput').addEventListener('change', async
 document.getElementById('toggleExplanationBtn').addEventListener('click', ()=>{
   explanationVisible = !explanationVisible;
   updateExplanation();
+});
+
+// 解説の追加・編集・削除・TSV保存
+function currentExplanationNo(){ return current + 1; }
+function makeExplanationPrompt(){
+  if(!items.length){ alert('先に英文教材を読み込んでください。'); return; }
+  const no=currentExplanationNo();
+  const english=items[current].eng||'';
+  return `次の英文を、TOEIC600点前後の学習者向けに、短く分かりやすく解説してください。
+【No.】${no}
+【英文】${english}
+
+・最初に自然な日本語訳を1文。
+・文法は理解に必要な点だけ1～2個。必要ならS/V/O/Cを簡潔に示す。
+・難しい語句だけ「語句：意味＋この文での使い方」を1つずつ記載。
+・不要な補足や同じ説明の繰り返しは省く。
+・見出しは「### 日本語訳」「### 文法」「### 語句」を使う。
+・重要語句や文法ポイントは **太字** にする。語句は「・」で箇条書きにする。
+・項目間の空行は最大1行。説明は短くする。
+英文にない情報は追加せず、解説本文だけを返してください。`;
+}
+document.getElementById('makeAiPromptBtn').addEventListener('click', async()=>{
+  const prompt=makeExplanationPrompt();
+  if(!prompt)return;
+  try{
+    await navigator.clipboard.writeText(prompt);
+    document.getElementById('explanationManagerStatus').textContent='No.'+currentExplanationNo()+' のAI依頼文をコピーしました。ChatGPTに貼り付けてください。';
+  }catch(e){
+    const area=document.getElementById('explanationEditor');
+    area.value=prompt; area.focus(); area.select();
+    document.getElementById('explanationManagerStatus').textContent='自動コピーできないため、依頼文を入力欄に表示しました。コピーしてChatGPTに貼り付けてください。';
+  }
+});
+document.getElementById('editExplanationBtn').addEventListener('click',()=>{
+  if(!items.length){alert('先に英文教材を読み込んでください。');return;}
+  const row=explanationRows.get(currentExplanationNo());
+  document.getElementById('explanationEditor').value=row?.explanation||'';
+  document.getElementById('explanationManagerStatus').textContent=row?'No.'+currentExplanationNo()+' の既存解説を編集できます。':'No.'+currentExplanationNo()+' にはまだ解説がありません。新規作成できます。';
+  document.getElementById('explanationEditor').focus();
+});
+document.getElementById('applyExplanationBtn').addEventListener('click',()=>{
+  if(!items.length){alert('先に英文教材を読み込んでください。');return;}
+  const no=currentExplanationNo();
+  let value=document.getElementById('explanationEditor').value.trim();
+  if(!value){alert('解説を入力してください。');return;}
+  // TSVの1行を貼り付けた場合は、3列目を解説として取り込む。
+  value=value.replace(/^```(?:tsv|text)?\s*/i,'').replace(/\s*```$/,'').trim();
+  const cols=value.split('\t');
+  if(cols.length>=3 && Number(cols[0].trim())===no){
+    value=decodeCell(cols.slice(2).join('\t'));
+  }
+  value=cleanExplanationFormatting(value);
+  const old=explanationRows.has(no);
+  if(old && !confirm('No.'+no+' の既存解説を更新します。よろしいですか？'))return;
+  explanationRows.set(no,{english:items[current].eng||'',explanation:value});
+  explanationLoadedName=explanationLoadedName||'新規作成';
+  updateExplanation();
+  document.getElementById('explanationManagerStatus').textContent='No.'+no+' の解説を'+(old?'更新':'追加')+'しました。まだファイルには保存されていません。';
+});
+document.getElementById('deleteExplanationBtn').addEventListener('click',()=>{
+  if(!items.length){alert('先に英文教材を読み込んでください。');return;}
+  const no=currentExplanationNo();
+  if(!explanationRows.has(no)){alert('No.'+no+' に削除する解説はありません。');return;}
+  if(!confirm('No.'+no+' の解説を削除しますか？\\n元のTSVファイルは、保存するまでは変更されません。'))return;
+  explanationRows.delete(no);
+  updateExplanation();
+  document.getElementById('explanationEditor').value='';
+  document.getElementById('explanationManagerStatus').textContent='No.'+no+' の解説を削除しました。変更を残すには「解説TSVを保存」を押してください。';
+});
+document.getElementById('deleteAllExplanationsBtn').addEventListener('click',()=>{
+  if(!explanationRows.size){alert('削除する解説がありません。');return;}
+  if(!confirm('読み込んだ解説 '+explanationRows.size+' 件をすべて削除しますか？\\nこの操作は元ファイルには反映されませんが、TSV保存後は削除状態になります。'))return;
+  explanationRows.clear();
+  updateExplanation();
+  document.getElementById('explanationEditor').value='';
+  document.getElementById('explanationManagerStatus').textContent='解説をすべて削除しました。必要なら保存前に元の解説ファイルを再読み込みしてください。';
+});
+document.getElementById('clearExplanationEditorBtn').addEventListener('click',()=>{
+  document.getElementById('explanationEditor').value='';
+});
+document.getElementById('saveExplanationFileBtn').addEventListener('click',()=>{
+  const lines=[['No','英文','解説'].join('\t')];
+  [...explanationRows.entries()].sort((a,b)=>a[0]-b[0]).forEach(([no,row])=>{
+    lines.push([String(no),encodeCell(row.english||''),encodeCell(row.explanation||'')].join('\t'));
+  });
+  const blob=new Blob(['\ufeff',lines.join('\r\n')+'\r\n'],{type:'text/tab-separated-values;charset=utf-8'});
+  const url=URL.createObjectURL(blob);
+  const a=document.createElement('a');a.href=url;
+  const base=(explanationLoadedName||'explanations').replace(/\.(txt|tsv)$/i,'');
+  a.download=base+'_解説編集'+explanationFileExtension;a.style.display='none';
+  document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),1000);
+  document.getElementById('explanationManagerStatus').textContent='解説 '+explanationRows.size+' 件をファイル保存しました。';
+});
+function buildExplanationFileBlob(){
+  const lines=[['No','英文','解説'].join('\t')];
+  [...explanationRows.entries()].sort((a,b)=>a[0]-b[0]).forEach(([no,row])=>{
+    lines.push([String(no),encodeCell(row.english||''),encodeCell(row.explanation||'')].join('\t'));
+  });
+  return new Blob(['\ufeff',lines.join('\r\n')+'\r\n'],{type:'text/tab-separated-values;charset=utf-8'});
+}
+document.getElementById('chooseExplanationOverwriteBtn').addEventListener('click',async()=>{
+  if(!explanationLoadedName){alert('先に解説TXT/TSVを読み込んでください。');return;}
+  if(!('showOpenFilePicker' in window)){alert('このブラウザでは直接上書き保存に対応していません。最新版のChromeまたはEdgeでGitHub Pagesから開いてください。');return;}
+  try{
+    const handles=await window.showOpenFilePicker({multiple:false,excludeAcceptAllOption:false,types:[
+      {description:'TSV解説ファイル',accept:{'text/tab-separated-values':['.tsv']}},
+      {description:'TXT解説ファイル',accept:{'text/plain':['.txt']}}
+    ]});
+    if(!handles||!handles.length)return;
+    const h=handles[0];
+    if(h.name!==explanationLoadedName){alert('読み込んだ解説ファイルと同じ名前のファイルを選択してください。\n読み込み：'+explanationLoadedName+'\n選択：'+h.name);explanationOverwriteHandle=null;return;}
+    explanationOverwriteHandle=h;
+    document.getElementById('explanationManagerStatus').textContent='上書き対象：'+h.name+'。確認後「解説ファイルを上書き保存」を押してください。';
+  }catch(err){if(err.name!=='AbortError')alert('ファイルを選択できませんでした：'+(err.message||err));}
+});
+document.getElementById('overwriteExplanationFileBtn').addEventListener('click',async()=>{
+  if(!explanationLoadedName){alert('先に解説TXT/TSVを読み込んでください。');return;}
+  if(!explanationOverwriteHandle){alert('先に「上書きする解説ファイルを選択」を押し、読み込んだ元ファイルを選んでください。');return;}
+  if(!confirm('「'+explanationOverwriteHandle.name+'」を解説内容で上書きします。元の内容は失われます。続けますか？'))return;
+  try{
+    if((await explanationOverwriteHandle.queryPermission({mode:'readwrite'}))!=='granted'){
+      const permission=await explanationOverwriteHandle.requestPermission({mode:'readwrite'});
+      if(permission!=='granted'){alert('書き込み許可が得られませんでした。');return;}
+    }
+    const writable=await explanationOverwriteHandle.createWritable();
+    await writable.write(buildExplanationFileBlob());
+    await writable.close();
+    document.getElementById('explanationManagerStatus').textContent='解説ファイル「'+explanationOverwriteHandle.name+'」に上書き保存しました。';
+    alert('解説ファイルを上書き保存しました。');
+  }catch(err){alert('上書き保存に失敗しました：'+(err.message||err)+'\n「解説ファイルを別名保存」も利用できます。');}
 });
 
 const audio=document.getElementById('audio');
@@ -286,6 +443,41 @@ function encodeCell(value){
 }
 function decodeCell(value){
   return String(value ?? '').replace(/\\\\/g,'\u0000').replace(/\\n/g,'\n').replace(/\u0000/g,'\\');
+}
+// ChatGPTのMarkdownは保存時に残し、表示時に太字・見出し・箇条書きへ変換する。
+function cleanExplanationFormatting(value){
+  return String(value ?? '')
+    .replace(/^\s*```(?:markdown|md|text)?\s*$/gim, '')
+    .replace(/\r\n?/g, '\n')
+    // 行末に紛れ込んだバックスラッシュ（今回の表示崩れの原因）を除去
+    .replace(/\\[ \t]*(?=\n|$)/g, '')
+    // 文字として貼り付けられた \n も実際の改行へ
+    .replace(/\\n/g, '\n')
+    .replace(/[ \t]+$/gm, '')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+}
+function escapeExplanationHtml(value){
+  return String(value).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+}
+function renderExplanationMarkdown(value){
+  const lines=cleanExplanationFormatting(value).split('\n');
+  return lines.map(line=>{
+    const t=line.trim();
+    if(!t) return '<div class="explanation-gap"></div>';
+    const heading=t.match(/^#{1,6}\s*(.+)$/);
+    if(heading) return '<div class="explanation-heading">'+formatInlineExplanation(heading[1])+'</div>';
+    if(/^【.+】$/.test(t)) return '<div class="explanation-heading">'+escapeExplanationHtml(t)+'</div>';
+    const bullet=t.match(/^(?:[-*+]\s+|・|•\s*)(.+)$/);
+    if(bullet) return '<div class="explanation-bullet">・'+formatInlineExplanation(bullet[1])+'</div>';
+    return '<div class="explanation-line">'+formatInlineExplanation(t)+'</div>';
+  }).join('');
+}
+function formatInlineExplanation(value){
+  let html=escapeExplanationHtml(value);
+  html=html.replace(/\*\*(.+?)\*\*/g,'<strong>$1</strong>').replace(/__(.+?)__/g,'<strong>$1</strong>');
+  html=html.replace(/`([^`]+)`/g,'<code>$1</code>');
+  return html;
 }
 
 async function decodeTextFile(file){
