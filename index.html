@@ -104,6 +104,18 @@ body.player-locked #explanationControls label,\nbody.player-locked #explanationM
   <div id="sentenceDisplay">
     <div id="eng" class="editable-text" data-field="eng" title="クリックして編集"></div><div id="jp" class="editable-text" data-field="jp" title="クリックして編集"></div><div id="sectionPicker" class="editable-text" role="button" tabindex="0" title="クリックしてSECTIONを選択" style="cursor:pointer;background:#f4f7fb;border:1px solid #ccd6e3;border-radius:5px;padding:8px;margin-top:8px">SECTION目次（クリックして一覧）</div><select id="sectionSelect" aria-label="SECTION目次" style="display:none;width:100%;padding:8px;margin-top:4px"></select><div class="edit-hint">英文・日本語文をクリックすると編集できます。SECTION表示をクリックすると全SECTIONの一覧が開き、選ぶとそのSECTIONの先頭行から再生します。</div>
   </div>
+  <div id="tagControls" style="margin:10px 0;padding:8px;border:1px solid #ddd;border-radius:6px;font-size:14px">
+    <strong>この文の判定：</strong>
+    <label style="margin-left:8px"><input type="checkbox" id="tagOK"> OK</label>
+    <label style="margin-left:8px"><input type="checkbox" id="tagNG"> NG</label>
+     <label style="margin-left:8px"><input type="checkbox" id="tagDash"> -</label>
+    <span id="tagSaveInfo" style="font-size:12px;color:#555;margin-left:8px">判定はブラウザに自動保存されます</span>
+    <div style="margin-top:8px">
+      <label for="tagFilter"><strong>再生する文：</strong></label>
+      <select id="tagFilter"><option value="ALL">すべて</option><option value="OK">OKだけ</option><option value="NG">NGだけ</option><option value="OKNG">OKとNG</option><option value="DASH">-だけ</option></select>
+      <span id="tagFilterInfo" style="font-size:12px;color:#555"></span>
+    </div>
+  </div>
   <div id="explanationControls">
     <strong>英文の文法解説</strong>
     <div style="margin-top:6px">
@@ -131,18 +143,6 @@ body.player-locked #explanationControls label,\nbody.player-locked #explanationM
         <button id="clearExplanationEditorBtn" type="button">入力欄をクリア</button>
       </div>
       <div id="explanationManagerStatus" style="font-size:12px;color:#555;margin-top:5px">解説を追加・編集・削除した後は「別名保存」または「上書き保存」でファイルに保存してください。</div>
-    </div>
-  </div>
-  <div id="tagControls" style="margin:10px 0;padding:8px;border:1px solid #ddd;border-radius:6px;font-size:14px">
-    <strong>この文の判定：</strong>
-    <label style="margin-left:8px"><input type="checkbox" id="tagOK"> OK</label>
-    <label style="margin-left:8px"><input type="checkbox" id="tagNG"> NG</label>
-     <label style="margin-left:8px"><input type="checkbox" id="tagDash"> -</label>
-    <span id="tagSaveInfo" style="font-size:12px;color:#555;margin-left:8px">判定はブラウザに自動保存されます</span>
-    <div style="margin-top:8px">
-      <label for="tagFilter"><strong>再生する文：</strong></label>
-      <select id="tagFilter"><option value="ALL">すべて</option><option value="OK">OKだけ</option><option value="NG">NGだけ</option><option value="OKNG">OKとNG</option><option value="DASH">-だけ</option></select>
-      <span id="tagFilterInfo" style="font-size:12px;color:#555"></span>
     </div>
   </div>
   <p id="repeatRow">再生回数 <span id="repeatInfo">0/0</span></p>
@@ -232,7 +232,21 @@ function updateExplanation(){
     // 一致しない旨はステータスに軽く知らせるだけで、解説表示は保留しない。
     status.textContent = '解説ファイル：' + explanationLoadedName + '（英文表記に差がありますが、No.で対応する解説を表示中）';
   }
-  panel.innerHTML = row.explanation ? renderExplanationMarkdown(row.explanation) : 'この文の解説は空欄です。';
+const currentEnglish = (items[current]?.eng || '').trim();
+
+const englishBlock =
+'<div style="margin-bottom:12px;padding:10px;background:#f5f8ff;border:1px solid #ccd6e3;border-radius:6px;">' +
+'<div style="font-weight:bold;margin-bottom:5px;">英文</div>' +
+escapeExplanationHtml(currentEnglish) +
+'</div>';
+
+panel.innerHTML =
+englishBlock +
+(
+  row.explanation
+    ? renderExplanationMarkdown(row.explanation)
+    : 'この文の解説は空欄です。'
+);
 }
 document.getElementById('explanationFileInput').addEventListener('change', async (e)=>{
   const file = e.target.files && e.target.files[0];
@@ -267,10 +281,10 @@ function makeExplanationPrompt(){
 【英文】${english}
 
 ・最初に自然な日本語訳を1文。
-・文法は理解に必要な点だけ1～2個。必要ならS/V/O/Cを簡潔に示す。
+・文法は理解に必要な点だけ1～5個。必要ならS/V/O/Cを簡潔に示す。
 ・難しい語句だけ「語句：意味＋この文での使い方」を1つずつ記載。
 ・不要な補足や同じ説明の繰り返しは省く。
-・見出しは「### 日本語訳」「### 文法」「### 語句」を使う。
+・見出しは「### 英文」「### 日本語訳」「### 文法」「### 語句」を使う。
 ・重要語句や文法ポイントは **太字** にする。語句は「・」で箇条書きにする。
 ・項目間の空行は最大1行。説明は短くする。
 英文にない情報は追加せず、解説本文だけを返してください。`;
