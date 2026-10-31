@@ -469,7 +469,7 @@ function cleanExplanationFormatting(value){
     .replace(/\\n/g, '\n')
     .replace(/[ \t]+$/gm, '')
     .replace(/\n{3,}/g, '\n\n')
-    .trim();
+    .replace(/。[\s　]*・/g, '。\n・').trim();
 }
 function escapeExplanationHtml(value){
   return String(value).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
