@@ -123,6 +123,18 @@ body.player-locked #explanationControls label,\nbody.player-locked #explanationM
       <input id="explanationFileInput" type="file" accept=".txt,.tsv,text/plain,text/tab-separated-values" style="display:none">
       <button id="toggleExplanationBtn" type="button">解説を表示</button>
     </div>
+<div id="explanationPlayControls"
+     style="margin-top:8px">
+
+  <button id="exPrevBtn">◀前</button>
+
+  <button id="exPlayBtn">▶再生</button>
+
+  <button id="exStopBtn">■停止</button>
+
+  <button id="exNextBtn">▶次</button>
+
+</div>
     <div id="explanationStatus">解説ファイル未読込。No・英文・解説の3列TSV/TXTを読み込めます。</div>
     <div id="explanationPanel" hidden>解説ファイルを読み込むと、現在の英文に対応する解説がここに表示されます。</div>
  
@@ -864,6 +876,17 @@ function playCurrent(){
  buildSequence();playPart(sequenceParts[0],playToken);
 }
 document.getElementById('playBtn').onclick=playCurrent;
+document.getElementById('exPlayBtn').onclick = playCurrent;
+
+document.getElementById('exStopBtn').onclick = stopAll;
+
+document.getElementById('exNextBtn').onclick = () => {
+  document.getElementById('nextBtn').click();
+};
+
+document.getElementById('exPrevBtn').onclick = () => {
+  document.getElementById('prevBtn').click();
+};
 document.getElementById('stopBtn').onclick=stopAll;
 document.getElementById('nextBtn').onclick=()=>{if(items.length){const wasPlaying=!!(audio.src&&!audio.paused)||speechSynthesis.speaking;stopAll();advanceIndex(1);showItem();if(wasPlaying){playCurrent();}}};
 document.getElementById('prevBtn').onclick=()=>{if(items.length){const wasPlaying=!!(audio.src&&!audio.paused)||speechSynthesis.speaking;stopAll();advanceIndex(-1);showItem();if(wasPlaying){playCurrent();}}};
